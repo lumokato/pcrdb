@@ -1,6 +1,8 @@
 import sqlite3
 import numpy
 import csv
+import json
+import sql
 
 
 def query_clan_top(database):
@@ -32,7 +34,7 @@ def get_clan_power(database, clan_id):
         for user in cursor:
             clan_power.append(user[0])
         return int(numpy.mean(clan_power))
-    except Exception as e:
+    except Exception:
         conn.rollback()
     conn.close()
 
@@ -45,14 +47,40 @@ def query_avg_power(database):
         # clan_dict[clan_id] = clan_dict[clan_id] + tuple([mean_power])
         clan_dict1[mean_power] = clan_dict[clan_id] + tuple([mean_power])
         # print(mean_power)
-    list1= sorted(clan_dict1.items(), key=lambda x:x[0], reverse=True)
+    list1 = sorted(clan_dict1.items(), key=lambda x: x[0], reverse=True)
     # clan_dict1= sorted(clan_dict.values()[3])
-    with open ('clan4.csv', 'w', encoding='gbk', newline="") as fp:
+    with open('clan4.csv', 'w', encoding='gbk', newline="") as fp:
         for clan in list1:
             write = csv.writer(fp)
             write.writerow(clan[1])
 
 
+def get_avatar():
+    avatar_dict = {}
+    total = 0
+    db = sql.get_sql_members('total.db', 2)
+    for member in db.keys():
+        # if db[member][5] < 51 and db[member][7] < 51:
+        if True:
+            total += 1
+            avatar = db[member][10]
+            if avatar in avatar_dict.keys():
+                avatar_dict[avatar] += 1
+            else:
+                avatar_dict[avatar] = 1
+    with open('id.json', encoding='utf-8') as fp:
+        id_dict = json.load(fp)
+    for id in id_dict:
+        if int(id) not in avatar_dict.keys():
+            print(id_dict[id])
+    avatar_dict_trans = {}
+    # a = sorted(avatar_dict.items(), key=lambda x: x[0], reverse=True)
+    for avatar in sorted(avatar_dict.items(), key=lambda x: x[1], reverse=True):
+        avatar_dict_trans[id_dict[str(avatar[0])]] = '{:.2%}'.format(avatar_dict[avatar[0]]/total)
+    with open('fmz.json', 'w', encoding='utf-8') as fp:
+        json.dump(avatar_dict_trans, fp, indent=4, ensure_ascii=False)
+
 
 if __name__ == "__main__":
-    query_avg_power('pcr_qd2204.db')
+    # query_avg_power('pcr_qd2204.db')
+    get_avatar()
