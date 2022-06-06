@@ -39,3 +39,19 @@ class PCRApi:
             temp = self.client.callapi('clan_battle/period_ranking', {
                                        'clan_id': self.clan_id, 'clan_battle_id': -1, 'period': -1, 'month': 0, 'page': page, 'is_my_clan': 0, 'is_first': 1})
         return temp['period_ranking']
+
+    # 查询jjc
+    def query_jjc(self, page):
+        try:
+            res = self.client.callapi('/arena/ranking', {'limit': 20, 'page': page})
+            jjc_down = []
+            if 'ranking' in res:
+                for user in res['ranking']:
+                    power_total = 0
+                    for unit in user['arena_deck']:
+                        power_total += unit['power']
+                    if power_total < 80000:
+                        jjc_down.append(user['rank'])
+            return jjc_down
+        except Exception:
+            return []

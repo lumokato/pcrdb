@@ -133,6 +133,17 @@ def merge_outside():
             sql.insert_single(this_db, 'members_abandon', member_data)
 
 
+def find_jjc_down():
+    with open('account.json') as f:
+        account_data = json.load(f)
+    account = account_data["jjc"]
+    App = PCRApi(account['viewer_id'], account['uid'], account['access_key'])
+    down_list = []
+    for i in range(1, 11):
+        down_list += App.query_jjc(i)
+    print(down_list)
+
+
 if __name__ == '__main__':
     # new_db(last_db, this_db, 0, 23735)
-    merge_outside()
+    find_jjc_down()
