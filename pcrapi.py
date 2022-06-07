@@ -50,7 +50,7 @@ class PCRApi:
                     power_total = 0
                     for unit in user['arena_deck']:
                         power_total += unit['power']
-                    if power_total < 80000:
+                    if power_total < 105000:
                         jjc_down.append(user['rank'])
             return jjc_down
         except Exception:

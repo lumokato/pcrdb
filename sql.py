@@ -117,12 +117,12 @@ def get_clan_id(last_db):
     conn.close()
 
 
-# 创建 TABLE members_detail
-def create_sql_members_detail(database):
+# 创建 TABLE members(带jjc组别与排名)
+def create_sql_members_plus(database, table_name):
     conn = sqlite3.connect(database)
     cursor = conn.cursor()
     # 使用预处理语句创建表
-    sql = """CREATE TABLE `members_detail` (
+    sql = """CREATE TABLE `%s` (
             "viewer_id"	INTEGER NOT NULL PRIMARY KEY,
             "user_name"	TEXT NOT NULL,
             "team_level"	INTEGER NOT NULL,
@@ -138,37 +138,9 @@ def create_sql_members_detail(database):
             "join_clan_name"	TEXT,
             "last_login_time"	TEXT NOT NULL,
             "last_refresh_time"	TEXT NOT NULL
-            )"""
+            )""" % table_name
     cursor.execute(sql)
-    print("CREATE TABLE members_detail OK")
-    cursor.close()
-    conn.close()
-
-
-# 创建 TABLE members_abandon
-def create_sql_members_abandon(database):
-    conn = sqlite3.connect(database)
-    cursor = conn.cursor()
-    # 使用预处理语句创建表
-    sql = """CREATE TABLE `members_abandon` (
-            "viewer_id"	INTEGER NOT NULL PRIMARY KEY,
-            "user_name"	TEXT NOT NULL,
-            "team_level"	INTEGER NOT NULL,
-            "unit_num"	INTEGER NOT NULL,
-            "total_power"	INTEGER NOT NULL,
-            "arena_rank"	INTEGER,
-            "arena_group"	INTEGER,
-            "grand_arena_rank"	INTEGER,
-            "grand_arena_group"	INTEGER,
-            "user_comment"	TEXT,
-            "favorite_unit"	INTEGER NOT NULL,
-            "join_clan_id"	INTEGER,
-            "join_clan_name"	TEXT,
-            "last_login_time"	TEXT NOT NULL,
-            "last_refresh_time"	TEXT NOT NULL
-            )"""
-    cursor.execute(sql)
-    print("CREATE TABLE members_abandon OK")
+    print("CREATE TABLE " + table_name + " OK")
     cursor.close()
     conn.close()
 
