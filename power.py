@@ -10,7 +10,7 @@ def query_clan_top(database):
     conn = sqlite3.connect(database)
     cursor = conn.cursor()
     COLstr = "clan_id,clan_name,current_period_ranking"
-    sql = """SELECT %s FROM `clan_detail`""" % COLstr
+    sql = """SELECT %s FROM `clan`""" % COLstr
     try:
         cursor.execute(sql)
         for clan in cursor:
@@ -28,7 +28,7 @@ def get_clan_power(database, clan_id):
     conn = sqlite3.connect(database)
     cursor = conn.cursor()
     # COLstr = "viewer_id,name,level,role,total_power,join_clan_id,join_clan_name,last_login_time,join_clan_history,name_history,last_refresh_time"
-    sql = """SELECT total_power FROM `clan_members` WHERE join_clan_id = %s""" % clan_id
+    sql = """SELECT total_power FROM `members` WHERE join_clan_id = %s""" % clan_id
     try:
         cursor.execute(sql)
         for user in cursor:
@@ -82,5 +82,5 @@ def get_avatar():
 
 
 if __name__ == "__main__":
-    # query_avg_power('pcr_qd2204.db')
-    get_avatar()
+    query_avg_power('pcr_qd2206.db')
+    # get_avatar()

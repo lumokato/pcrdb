@@ -4,7 +4,7 @@ import sql
 import time
 
 last_db = 'data/pcr_qd2205.db'
-this_db = 'data/total.db'
+this_db = 'data/pcr_qd2206.db'
 
 
 # 获取每月新db
@@ -274,7 +274,8 @@ def pre_data():
     #         file.write('已完成更新'+str(count)+'\n')
     #         file.close()
 
+
 if __name__ == '__main__':
-    new_group_clan(26642)
-    # new_db(last_db, this_db, 0, 23735)
+    # find_jjc_down()
+    new_db(last_db, this_db, 1500, 0)
     # find_farm_group()
