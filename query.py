@@ -2,6 +2,7 @@ from pcrapi import PCRApi
 import json
 import sql
 import time
+import os
 
 last_db = 'data/pcr_qd2205.db'
 this_db = 'data/pcr_qd2206.db'
@@ -258,7 +259,6 @@ def pre_data():
                 pre_group[pre_data[6]] = 1
             if pre_data[5] < 21:
                 active_dict.append(pre_data)
-
     # print(len(active_dict))
     # with open('account.json') as f:
     #     account_data = json.load(f)
@@ -275,7 +275,38 @@ def pre_data():
     #         file.close()
 
 
+# 查询成员留存信息
+def members_alive(clan_id):
+    db_all = os.listdir('data/')
+    db_month = []
+    for db in db_all:
+        if db[:6] == 'pcr_qd':
+            db_month.append(db)
+    member_last = sql.get_sql_members('data/' + db_month[-1], 0)
+    mem_last_list = []
+    for mem in member_last.keys():
+        if member_last[mem][5] == clan_id:
+            mem_last_list.append(mem)
+    mem_join_list = []
+    for db in db_month:
+        member_month = sql.get_sql_members('data/' + db, 1)
+        if not member_month:
+            member_month = sql.get_sql_members('data/' + db, 0)
+        mem_month_list = []
+        name_month_list = []
+        for mem in member_month.keys():
+            if member_month[mem][5] == clan_id and mem in mem_last_list:
+                mem_month_list.append(mem)
+                if mem not in mem_join_list:
+                    mem_join_list.append(mem)
+                    name_month_list.append(member_last[mem][1])
+        # print(db[6:10] + '现存人数: ' + str(len(mem_month_list)) + str(name_month_list))
+        print(db[6:10] + '加入: ' + str(name_month_list)[1:-1])
+
+    return 0
+
+
 if __name__ == '__main__':
-    # find_jjc_down()
-    new_db(last_db, this_db, 1500, 0)
+    members_alive(22493)
+    # new_db(last_db, this_db, 1500, 0)
     # find_farm_group()
