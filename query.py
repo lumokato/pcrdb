@@ -3,9 +3,10 @@ import json
 import sql
 import time
 import os
+import csv
 
-last_db = 'data/pcr_qd2205.db'
-this_db = 'data/pcr_qd2206.db'
+last_db = 'data/pcr_qd2208.db'
+this_db = 'data/pcr_qd2209.db'
 
 
 # 获取每月新db
@@ -39,7 +40,8 @@ def new_db(last_db, this_db, filter_rank=0, start_clan=0):
             file.write('无此公会'+str(clan_id)+'\n')
         file.close()
     # 读取新id
-    clan_new = list(clan_dict.keys())[-1]
+    # clan_new = list(clan_dict.keys())[-1]
+    clan_new = 47923
     empty_count = 0
     while True:
         file = open('log.txt', 'a', encoding='utf-8')
@@ -50,9 +52,9 @@ def new_db(last_db, this_db, filter_rank=0, start_clan=0):
             file.write('已更新公会'+str(clan_new)+'\n')
             empty_count = 0
         else:
-            file.write('无此公会'+str(clan_id)+'\n')
+            file.write('无此公会'+str(clan_new)+'\n')
             empty_count += 1
-        if empty_count > 9:
+        if empty_count > 20:
             break
         file.close()
 
@@ -302,11 +304,35 @@ def members_alive(clan_id):
                     name_month_list.append(member_last[mem][1])
         # print(db[6:10] + '现存人数: ' + str(len(mem_month_list)) + str(name_month_list))
         print(db[6:10] + '加入: ' + str(name_month_list)[1:-1])
-
     return 0
 
 
+# 查询成员当前所在工会
+def members_now(clan_id):
+    member_dict = sql.get_sql_members(this_db)
+    mem_clan_list = []
+    for mem in member_dict.keys():
+        if member_dict[mem][5] == clan_id:
+            mem_clan_list.append(mem)
+
+    with open('account.json') as f:
+        account_data = json.load(f)
+
+    account = account_data["new2"]
+    App = PCRApi(account['viewer_id'], account['uid'], account['access_key'])
+    data_all = []
+    for vid in mem_clan_list:
+        data = App.query_id(vid)
+        data_all.append([data['user_info']['viewer_id'], data['user_info']['user_name'], data['clan_name']])
+
+    with open('user.csv', 'w', encoding='gbk', newline="") as fp:
+        for user in data_all:
+            write = csv.writer(fp)
+            write.writerow(user)
+
+
 if __name__ == '__main__':
-    members_alive(22493)
-    # new_db(last_db, this_db, 1500, 0)
+    # members_now(22493)
+    # members_alive(22493)
+    new_db(last_db, this_db, 0, 0)
     # find_farm_group()

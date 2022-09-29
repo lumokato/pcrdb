@@ -105,7 +105,7 @@ def get_clan_id(last_db):
     clan_dict = {}
     conn = sqlite3.connect(last_db)
     cursor = conn.cursor()
-    sql = """SELECT clan_id,current_period_ranking FROM `clan_detail`"""
+    sql = """SELECT clan_id,current_period_ranking FROM `clan`"""
     try:
         cursor.execute(sql)
         for clan in cursor:

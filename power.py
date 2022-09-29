@@ -49,7 +49,7 @@ def query_avg_power(database):
         # print(mean_power)
     list1 = sorted(clan_dict1.items(), key=lambda x: x[0], reverse=True)
     # clan_dict1= sorted(clan_dict.values()[3])
-    with open('clan4.csv', 'w', encoding='gbk', newline="") as fp:
+    with open('clan2209.csv', 'w', encoding='utf-8', newline="") as fp:
         for clan in list1:
             write = csv.writer(fp)
             write.writerow(clan[1])
@@ -82,5 +82,5 @@ def get_avatar():
 
 
 if __name__ == "__main__":
-    query_avg_power('pcr_qd2206.db')
+    query_avg_power('data/pcr_qd2209.db')
     # get_avatar()
