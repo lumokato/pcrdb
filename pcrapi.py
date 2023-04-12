@@ -1,57 +1,59 @@
 from pcrclient import PCRClient
-import time
+import json
+
+with open('json/account-farm.json') as f:
+    account_data = json.load(f)
+
+
+async def create_client(index):
+    qd_client = PCRApi(account_data['accounts'][index]['vid'], account_data['accounts'][index]['uid'], account_data["access_key"])
+    await qd_client.login()
+    return qd_client
 
 
 class PCRApi:
-    def __init__(self, viewer_id, uid, access_key):
+    def __init__(self, vid, uid, ac_key):
+        self.home = None
+        self.load = None
         self.uid = uid
-        self.access_key = access_key
-        self.client = PCRClient(viewer_id)
-        self.load, self.home = self.client.login(uid, access_key)
-        self.clan_id = self.home['user_clan']['clan_id']
+        self.access_key = ac_key
+        self.viewer_id = vid
+        self.client = PCRClient(self.viewer_id)
 
-    def query_id(self, viewer_id: int):
+    async def login(self):
+        print('login'+str(self.viewer_id))
+        self.load, self.home = await self.client.login(self.uid, self.access_key)
+
+    async def query_id(self, viewer_id: int):
         try:
-            res = self.client.callapi('/profile/get_profile', {'target_viewer_id': viewer_id})
-            res['user_info']
+            res = await self.client.callapi('/profile/get_profile', {'target_viewer_id': viewer_id})
         except Exception:
-            time.sleep(5)
-            self.client.login(self.uid, self.access_key)
-            res = self.client.callapi('/profile/get_profile', {'target_viewer_id': viewer_id})            
+            await self.client.login(self.uid, self.access_key)
+            res = await self.client.callapi('/profile/get_profile', {'target_viewer_id': viewer_id})
         return res
 
-    def query_clan(self, clan_id: int):
+    async def query_clan(self, clan_id: int):
         try:
-            res = self.client.callapi('/clan/others_info', {'clan_id': clan_id})
-            res['clan']
+            res = await self.client.callapi('/clan/others_info', {'clan_id': clan_id})
         except Exception:
-            time.sleep(5)
-            self.client.login(self.uid, self.access_key)
-            res = self.client.callapi('/clan/others_info', {'clan_id': clan_id})
+            await self.client.login(self.uid, self.access_key)
+            res = await self.client.callapi('/clan/others_info', {'clan_id': clan_id})
+        return res
+
+    async def query_grand(self, page:int):
+        try:
+            res = await self.client.callapi('/grand_arena/ranking', {'limit': 20, 'page': page})
+        except Exception:
+            await self.client.login(self.uid, self.access_key)
+            res = await self.client.callapi('/grand_arena/ranking', {'limit': 20, 'page': page})
         return res
 
     # 查询会战排名页数
-    def get_page_status(self, page: int):
-        temp = self.client.callapi('clan_battle/period_ranking', {
+    async def get_page_status(self, page: int):
+        res = await self.client.callapi('clan_battle/period_ranking', {
                                    'clan_id': self.clan_id, 'clan_battle_id': -1, 'period': -1, 'month': 0, 'page': page, 'is_my_clan': 0, 'is_first': 1})
-        if 'period_ranking' not in temp:
-            self.client.login(self.uid, self.access_key)
-            temp = self.client.callapi('clan_battle/period_ranking', {
+        if 'period_ranking' not in res:
+            await self.client.login(self.uid, self.access_key)
+            res = await self.client.callapi('clan_battle/period_ranking', {
                                        'clan_id': self.clan_id, 'clan_battle_id': -1, 'period': -1, 'month': 0, 'page': page, 'is_my_clan': 0, 'is_first': 1})
-        return temp['period_ranking']
-
-    # 查询jjc
-    def query_jjc(self, page):
-        try:
-            res = self.client.callapi('/arena/ranking', {'limit': 20, 'page': page})
-            jjc_down = []
-            if 'ranking' in res:
-                for user in res['ranking']:
-                    power_total = 0
-                    for unit in user['arena_deck']:
-                        power_total += unit['power']
-                    if power_total < 105000:
-                        jjc_down.append(user['rank'])
-            return jjc_down
-        except Exception:
-            return []
+        return res['period_ranking']
