@@ -8,7 +8,7 @@ from queuedb import QueueDb
 
 
 # 获取所有clan
-def new_clan(db_new=None, db_last=None, query_type='month', sync_num=10, new_clan_add=200):
+def new_clan(db_new=None, db_last=None, query_type='month', sync_num=10, new_clan_add=20):
     if db_new is None:
         db_new = 'data/month/pcr_qd' + time.strftime("%y%m", time.localtime()) + '.db'
         db_last = 'data/month/' + os.listdir('data/month')[-1]
@@ -20,31 +20,37 @@ def new_clan(db_new=None, db_last=None, query_type='month', sync_num=10, new_cla
     for clan_id in range(quest_clan_list[-1], quest_clan_list[-1] + new_clan_add):
         quest_clan_list.append(clan_id)
 
-    def data_process_clan(frag_db, clan_data):
+    def data_process_clan(clan_data):
         if 'clan' in clan_data:
-            pcrsql.sql_insert(frag_db, 'clan', clan_data)
-            print('已更新公会' + str(clan_data['clan']['detail']['clan_id']) + '\n')
+            print('已查询公会' + str(clan_data['clan']['detail']['clan_id']) + '\n')
             last_login_time = 0
             for member in clan_data['clan']['members']:
                 if member['last_login_time'] > last_login_time:
                     last_login_time = member['last_login_time']
-            # 90 days
-            if time.time() - last_login_time < 7776000:
-                return {"exist": 1, "active": 1}
+            # 60 days
+            if time.time() - last_login_time < 2592000*2:
+                return {"data": clan_data, "exist": 1, "active": 1}
             else:
-                return {"exist": 1, "active": 0}
+                return {"data": clan_data, "exist": 1, "active": 0}
         elif 'server_error' in clan_data:
             if 'message' in clan_data['server_error']:
                 if '此行会已解散' in clan_data['server_error']['message']:
                     print('已解散工会\n')
-                    return {"exist": 0, "active": 0}
+                    return {"data": None, "exist": 0, "active": 0}
                 elif '连接中断' in clan_data['server_error']['message']:
                     return 0
 
-    def data_process_status(frag_db, status_data):
-        pcrsql.sql_insert(frag_db, 'status', status_data)
+    def db_insert(frag_db, data_return):
+        clan_data_list = []
+        for clan in data_return.values():
+            if clan['data']:
+                clan_data_list.append(clan['data'])
+        pcrsql.sql_insert(frag_db, 'clan', clan_data_list)
+        pcrsql.sql_insert(frag_db, 'status', data_return)
+        print('完成'+str(list(data_return.keys())))
+        time.sleep(3)
 
-    clan_queue = QueueDb(db_new, ['clan', 'status', 'members'], quest_clan_list, data_process_clan, data_process_status, sync_num)
+    clan_queue = QueueDb(db_new, ['clan', 'status', 'members'], quest_clan_list, data_process_clan, db_insert, sync_num)
     clan_queue.queue_start()
 
 
@@ -60,7 +66,7 @@ def new_group():
             if time.time() - login_time < 2592000:
                 quest_members_list.append(member_id)
 
-    def data_process_members(frag_db, members_data):
+    def data_process_members(members_data):
         if 'user_info' in members_data:
             viewer_id = members_data['user_info']['viewer_id']
             if viewer_id in member_dict.keys():
@@ -69,14 +75,14 @@ def new_group():
         else:
             return 0
 
-    def db_insert_frag(frag_db, multi_data):
+    def db_insert(frag_db, multi_data):
         multi_data_list = []
         for member_data_list in multi_data.values():
             multi_data_list.append(member_data_list)
         pcrsql.sql_insert(frag_db, 'arena', multi_data_list)
         time.sleep(3)
 
-    member_queue = QueueDb(db_new, 'members_arena', quest_members_list, data_process_members, db_insert_frag, 10)
+    member_queue = QueueDb(db_new, 'members_arena', quest_members_list, data_process_members, db_insert, 10)
     member_queue.queue_start()
 
 
@@ -89,13 +95,19 @@ def find_farm_group():
     for account in account_farm["accounts"]:
         farm_account.append(account["vid"])
 
-    def insert_farm_group(frag_db, farm_data):
+    def data_process_farm(farm_data):
         if 'user_info' in farm_data:
-            pcrsql.sql_insert(frag_db, 'arena', [farm_data, ["''", "''"]])
-            return 1
+            return [farm_data, ["''", "''"]]
         else:
             return 0
-    farm_queue = QueueDb(db_name, 'members_arena', farm_account, insert_farm_group)
+
+    def db_insert(frag_db, farm_multi_data):
+        multi_data_list = []
+        for member_data_list in farm_multi_data.values():
+            multi_data_list.append(member_data_list)
+        pcrsql.sql_insert(frag_db, 'arena', multi_data_list)
+
+    farm_queue = QueueDb(db_name, 'members_arena', farm_account, data_process_farm, db_insert)
     farm_queue.queue_start()
 
 

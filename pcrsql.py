@@ -48,6 +48,7 @@ def sql_get(db_name, db_type):
     elif db_type == 'arena':
         return get_sql_members_arena(db_name)
 
+
 # 创建 TABLE clan
 def create_sql_clan(database):
     conn = sqlite3.connect(database)
@@ -168,12 +169,13 @@ def create_sql_grand(database):
     conn.close()
 
 
-# 将 clan 信息添加到TABLE中
+# 将 clan 信息添加到TABLE中 (队列写入db)
 def insert_new_clan_detail(database, clan_data_list):
-    conn = sqlite3.connect(database)
-    cursor = conn.cursor()
     if isinstance(clan_data_list, dict):
         clan_data_list = [clan_data_list]
+    conn = sqlite3.connect(database)
+    cursor = conn.cursor()
+
     for clan_data in clan_data_list:
         clan_dict = clan_data['clan']['detail']
         insert_keys = ["clan_id", "clan_name", "leader_viewer_id", "leader_name",
@@ -188,7 +190,7 @@ def insert_new_clan_detail(database, clan_data_list):
             else:
                 row_str = (row_str + "'%s'" + ',') % (clan_dict[key])
         sql_row = """REPLACE INTO `clan` (%s) VALUES (%s)""" % (
-        col_str[:-1] + ",refresh_time", row_str[:-1] + "," + time.strftime("'%Y-%m-%d %H:%M:%S'", time.localtime()))
+            col_str[:-1] + ",refresh_time", row_str[:-1] + "," + time.strftime("'%Y-%m-%d %H:%M:%S'", time.localtime()))
         cursor.execute(sql_row)
         # 添加 members 信息
         members_list = clan_data['clan']['members']
@@ -213,12 +215,13 @@ def insert_new_clan_detail(database, clan_data_list):
     conn.close()
 
 
-# 更新 members_arena 信息
+# 更新 members_arena 信息 (队列写入db)
 def insert_members_arena(database, mix_data_list):
     if isinstance(mix_data_list[0], dict):
         mix_data_list = [mix_data_list]
     conn = sqlite3.connect(database)
     cursor = conn.cursor()
+
     for mix_data in mix_data_list:
         member_data = mix_data[0]
         clan_data = mix_data[1]
