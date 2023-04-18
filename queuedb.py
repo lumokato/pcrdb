@@ -1,5 +1,4 @@
 import os
-
 from pcrapi import create_client
 import pcrsql
 import time
@@ -78,9 +77,7 @@ class QueueDb:
 
     def queue_start(self):
         start = time.time()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(self.queue_main())
+        asyncio.run(self.queue_main())
         self.merge_db()
         end = time.time()
         print(end-start)

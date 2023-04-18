@@ -57,7 +57,7 @@ def create_sql_clan(database):
     # 使用 execute() 方法执行 SQL，如果表存在则删除
     # cursor.execute("DROP TABLE IF EXISTS `clan`")
     # 使用预处理语句创建表
-    sql = """CREATE TABLE `clan` (
+    sql = """CREATE TABLE clan (
             "clan_id"	INTEGER NOT NULL PRIMARY KEY,
             "clan_name"	TEXT NOT NULL,
             "leader_viewer_id"	INTEGER NOT NULL,

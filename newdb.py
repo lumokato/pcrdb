@@ -62,7 +62,7 @@ def new_group():
     quest_members_list = []
     for member_id in member_dict.keys():
         if member_dict[member_id][4] > 1500000:
-            login_time = time.mktime(time.strptime(member_dict[member_id][7],"%Y-%m-%d %H:%M:%S"))
+            login_time = time.mktime(time.strptime(member_dict[member_id][7], "%Y-%m-%d %H:%M:%S"))
             if time.time() - login_time < 2592000:
                 quest_members_list.append(member_id)
 
@@ -71,7 +71,7 @@ def new_group():
             viewer_id = members_data['user_info']['viewer_id']
             if viewer_id in member_dict.keys():
                 clan_info = [member_dict[viewer_id][5], member_dict[viewer_id][6]]
-            return [members_data, clan_info]
+                return [members_data, clan_info]
         else:
             return 0
 
@@ -138,9 +138,7 @@ def find_pjjc_top():
         await asyncio.gather(*tasks)
 
     start = time.time()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(queue_main())
+    asyncio.run(queue_main())
     end = time.time()
     print(end-start)
 

@@ -48,6 +48,15 @@ class PCRApi:
             res = await self.client.callapi('/grand_arena/ranking', {'limit': 20, 'page': page})
         return res
 
+    async def query_arena(self, page:int):
+        try:
+            res = await self.client.callapi('/arena/ranking', {'limit': 20, 'page': page})
+            res['ranking']
+        except Exception:
+            await self.client.login(self.uid, self.access_key)
+            res = await self.client.callapi('/arena/ranking', {'limit': 20, 'page': page})
+        return res
+
     # 查询会战排名页数
     async def get_page_status(self, page: int):
         res = await self.client.callapi('clan_battle/period_ranking', {
