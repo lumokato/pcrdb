@@ -1,3 +1,4 @@
+import os.path
 import sqlite3
 import time
 import re
@@ -169,6 +170,47 @@ def create_sql_grand(database):
     conn.close()
 
 
+def create_sql_arena_deck(database):
+    conn = sqlite3.connect(database)
+    cursor = conn.cursor()
+    sql = """CREATE TABLE `arena_deck` (
+            "viewer_id"	INTEGER NOT NULL PRIMARY KEY,
+            "user_name"	TEXT NOT NULL,
+            "team_level"	INTEGER NOT NULL,
+            "arena_group"  INTEGER,
+            "arena_rank"  INTEGER,
+            "id0"	INTEGER,
+            "unit_rarity0"	INTEGER,
+            "unit_level0"	INTEGER,
+            "promotion_level0"	INTEGER,
+            "power0"	INTEGER,
+            "id1"	INTEGER,
+            "unit_rarity1"	INTEGER,
+            "unit_level1"	INTEGER,
+            "promotion_level1"	INTEGER,
+            "power1"	INTEGER,
+            "id2"	INTEGER,
+            "unit_rarity2"	INTEGER,
+            "unit_level2"	INTEGER,
+            "promotion_level2"	INTEGER,
+            "power2"	INTEGER,
+            "id3"	INTEGER,
+            "unit_rarity3"	INTEGER,
+            "unit_level3"	INTEGER,
+            "promotion_level3"	INTEGER,
+            "power3"	INTEGER,
+            "id4"	INTEGER,
+            "unit_rarity4"	INTEGER,
+            "unit_level4"	INTEGER,
+            "promotion_level4"	INTEGER,
+            "power4"	INTEGER
+            )"""
+    cursor.execute(sql)
+    print("CREATE TABLE arena_deck OK")
+    cursor.close()
+    conn.close()
+
+
 # 将 clan 信息添加到TABLE中 (队列写入db)
 def insert_new_clan_detail(database, clan_data_list):
     if isinstance(clan_data_list, dict):
@@ -289,7 +331,7 @@ def insert_members_grand(database, res, group):
             elif key == "grand_arena_rank":
                 row_str = (row_str+"'%s'"+',') % (member_dict["rank"])
             elif key == "grand_arena_group":
-                row_str = (row_str+"'%s'"+',') % (group)
+                row_str = (row_str+"'%s'"+',') % group
             else:
                 row_str = (row_str+"'%s'"+',') % (member_dict[key])
 
@@ -298,6 +340,42 @@ def insert_members_grand(database, res, group):
 
         sql_row = """REPLACE INTO `grand_arena` (%s) VALUES (%s)""" % (
                 col_str, row_str+','+time.strftime("'%Y-%m-%d %H:%M:%S'", time.localtime()))
+        cursor.execute(sql_row)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def insert_arena_deck(database, mix_data_list, group):
+    if not os.path.exists(database):
+        create_sql_arena_deck(database)
+    if isinstance(mix_data_list, dict):
+        mix_data_list = [mix_data_list]
+    conn = sqlite3.connect(database)
+    cursor = conn.cursor()
+
+    for member_dict in mix_data_list:
+        insert_keys = ["viewer_id", "user_name", "team_level", "arena_rank", "arena_group"]
+        row_str = ''
+        col_str = ''
+        for key in insert_keys:
+            col_str = (col_str+'%s'+',') % key
+            if key == "user_name":
+                row_str = (row_str+"'%s'"+',') % (validate(member_dict[key]))
+            elif key == "arena_group":
+                row_str = (row_str+"'%s'"+',') % group
+            elif key == "arena_rank":
+                row_str = (row_str+"'%s'"+',') % member_dict['rank']
+            else:
+                row_str = (row_str+"'%s'"+',') % (member_dict[key])
+
+        for id_key in range(len(member_dict['arena_deck'])):
+            insert_id_keys = ["id", "unit_rarity", "unit_level", "promotion_level", "power"]
+            for key in insert_id_keys:
+                col_str = (col_str + '%s' + str(id_key) + ',') % key
+                row_str = (row_str + "'%s'" + ',') % (member_dict['arena_deck'][id_key][key])
+
+        sql_row = """REPLACE INTO `arena_deck` (%s) VALUES (%s)""" % (col_str[:-1], row_str[:-1])
         cursor.execute(sql_row)
     conn.commit()
     cursor.close()

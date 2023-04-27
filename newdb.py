@@ -8,7 +8,7 @@ from queuedb import QueueDb
 
 
 # 获取所有clan
-def new_clan(db_new=None, db_last=None, query_type='month', sync_num=10, new_clan_add=20):
+def new_clan(db_new=None, db_last=None, query_type='month', sync_num=10, new_clan_add=100):
     if db_new is None:
         db_new = 'data/month/pcr_qd' + time.strftime("%y%m", time.localtime()) + '.db'
         db_last = 'data/month/' + os.listdir('data/month')[-1]
