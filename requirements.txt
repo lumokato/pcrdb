@@ -1,0 +1,12 @@
+requests
+msgpack>=1.0.2
+pycryptodome>=3.9.9
+numpy
+python-dateutil
+aiohttp
+seaborn
+psycopg2-binary
+pyyaml
+python-dotenv
+fastapi
+uvicorn

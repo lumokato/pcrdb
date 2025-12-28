@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: pcrdb_container
+    restart: always
+    environment:
+      POSTGRES_USER: ${PCRDB_USER}
+      POSTGRES_PASSWORD: ${PCRDB_PASSWORD}
+      POSTGRES_DB: ${PCRDB_DATABASE}
+    ports:
+      - "127.0.0.1:${PCRDB_PORT:-5432}:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

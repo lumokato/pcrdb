@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCRDB Analysis</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>PCRDB 数据分析</h1>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="clan-history">公会历史查询</button>
+            <button class="tab-btn" data-tab="player-history">玩家历史查询</button>
+            <button class="tab-btn" data-tab="clan-power">公会战力排行</button>
+            <button class="tab-btn" data-tab="grand-winning">PJJC 胜场</button>
+        </nav>
+
+        <main>
+            <!-- 公会历史查询 -->
+            <section id="clan-history" class="tab-content active">
+                <div class="search-bar">
+                    <input type="text" id="clan-input" placeholder="输入公会名 或 ID">
+                    <button onclick="searchClanHistory()">查询</button>
+                </div>
+                <div id="clan-info" class="info-card hidden"></div>
+                <div class="table-container">
+                    <table id="clan-history-table">
+                        <thead>
+                            <tr>
+                                <th>月份</th>
+                                <th>排名</th>
+                                <th>成员数</th>
+                                <th>公会名</th>
+                                <th>会长</th>
+                                <th>会长ID</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 玩家历史查询 -->
+            <section id="player-history" class="tab-content">
+                <div class="search-bar">
+                    <input type="text" id="player-input" placeholder="输入玩家 Viewer ID">
+                    <button onclick="searchPlayerHistory()">查询</button>
+                </div>
+                <div id="player-info" class="info-card hidden"></div>
+                <div class="table-container">
+                    <table id="player-history-table">
+                        <thead>
+                            <tr>
+                                <th>月份</th>
+                                <th>公会</th>
+                                <th>排名</th>
+                                <th>角色名</th>
+                                <th>等级</th>
+                                <th>战力</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 战力排行 -->
+            <section id="clan-power" class="tab-content">
+                <div class="search-bar">
+                    <button onclick="loadPowerRanking()">刷新排行</button>
+                </div>
+                <div class="table-container">
+                    <table id="power-rank-table">
+                        <thead>
+                            <tr>
+                                <th>排名 (Rank)</th>
+                                <th>公会 (Clan Name)</th>
+                                <th>ID</th>
+                                <th>平均战力 (Avg Power)</th>
+                                <th>成员数 (Members)</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- PJJC 胜场 -->
+            <section id="grand-winning" class="tab-content">
+                <div class="search-bar">
+                    <input type="number" id="grand-group" placeholder="分场 (0为全部)" value="0">
+                    <button onclick="loadGrandWinning()">查询</button>
+                </div>
+                <div class="table-container">
+                    <table id="grand-winning-table">
+                        <thead>
+                            <tr>
+                                <th>排名 (Rank)</th>
+                                <th>角色名 (User Name)</th>
+                                <th>ID</th>
+                                <th>胜场 (Wins)</th>
+                                <th>最高排名 (Grand Rank)</th>
+                                <th>分场 (Group)</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/main.js"></script>
+</body>
+
+</html>
