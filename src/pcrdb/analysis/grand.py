@@ -1,13 +1,9 @@
 """
 PJJC 分析模块
 """
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from db.connection import get_connection
+from ..db.connection import get_connection
 
 
 def get_winning_ranking(group: int, limit: int = 100) -> List[Dict]:
@@ -28,7 +24,7 @@ def get_winning_ranking(group: int, limit: int = 100) -> List[Dict]:
     # 注意：grand_rankings 表中没有 user_name，需要关联 player_profile_snapshots 或 player_clan_snapshots
     # 优先关联 player_profile (更可能包含准确名字)，其次 player_clan
     
-    print(f"DEBUG: Querying group {group} {'(ALL)' if group == 0 else ''} limit {limit}")
+
     
     if group == 0:
         # 查询所有分场

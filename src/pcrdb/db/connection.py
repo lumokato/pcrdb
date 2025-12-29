@@ -56,8 +56,6 @@ def get_config() -> Dict[str, Any]:
     batch_size = int(os.getenv('PCRDB_BATCH_SIZE', '30'))
     access_key = os.getenv('PCRDB_ACCESS_KEY', '')
 
-    print(f"DEBUG Config: DB={database} Host={host}")
-
     _config = {
         'host': host,
         'port': port,
@@ -72,6 +70,27 @@ def get_config() -> Dict[str, Any]:
 
 
 
+def create_connection(**kwargs):
+    """
+    Create a new PostgreSQL connection
+    
+    Args:
+        **kwargs: Additional arguments passed to psycopg2.connect
+    """
+    config = get_config()
+    # Merge default config with kwargs
+    conn_args = {
+        'host': config['host'],
+        'port': config['port'],
+        'database': config['database'],
+        'user': config['user'],
+        'password': config['password']
+    }
+    conn_args.update(kwargs)
+    
+    return psycopg2.connect(**conn_args)
+
+
 def get_connection():
     """
     Get PostgreSQL connection (cached)
@@ -80,14 +99,7 @@ def get_connection():
     if _connection is not None and not _connection.closed:
         return _connection
     
-    config = get_config()
-    _connection = psycopg2.connect(
-        host=config['host'],
-        port=config['port'],
-        database=config['database'],
-        user=config['user'],
-        password=config['password']
-    )
+    _connection = create_connection()
     return _connection
 
 

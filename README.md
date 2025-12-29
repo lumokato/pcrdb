@@ -106,3 +106,9 @@ python scheduler.py
 ```
 
 调度规则在 `config/schedule.yaml` 中配置。
+
+## 文档列表
+
+- [开发指南](docs/DEVELOPMENT.md): 如何添加新功能
+- [API 规范](docs/ANALYSIS_API.md): 查询接口定义
+- [功能特性](docs/FEATURES.md): 功能清单与优先级

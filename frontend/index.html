@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCR 数据工具箱</title>
+    <link rel="shortcut icon" type="image/x-icon" href="/static/128431.ico" />
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/">
+                    <img src="/static/128431.ico" alt="Logo" style="height: 28px;">
+                    PCR 数据工具箱
+                </a>
+                <div class="navbar-menu">
+                    <span class="navbar-item" :class="{ active: currentTab === 'clan_battle' }"
+                        @click="currentTab = 'clan_battle'">
+                        会战查询
+                    </span>
+                    <span class="navbar-item" :class="{ active: currentTab === 'clan' }"
+                        @click="currentTab = auth.isLoggedIn ? 'clan' : 'login'">
+                        公会查询
+                    </span>
+                    <span class="navbar-item" :class="{ active: currentTab === 'grand' }"
+                        @click="currentTab = auth.isLoggedIn ? 'grand' : 'login'">
+                        双场查询
+                    </span>
+                    <span class="navbar-item" :class="{ active: currentTab === 'player' }"
+                        @click="currentTab = auth.isLoggedIn ? 'player' : 'login'">
+                        玩家查询
+                    </span>
+                    <span class="navbar-item" :class="{ active: currentTab === 'admin' }"
+                        v-if="auth.isLoggedIn && auth.role === 'admin'" @click="currentTab = 'admin'"
+                        style="color: var(--primary-color);">
+                        管理面板
+                    </span>
+
+                    <!-- 登录状态 -->
+                    <span v-if="auth.isLoggedIn" class="navbar-item" style="color: var(--primary-color);">
+                        {{ auth.username }}
+                        <a href="#" @click.prevent="logout" style="margin-left: 0.5rem; font-size: 0.9rem;">登出</a>
+                    </span>
+                    <span v-else class="navbar-item" :class="{ active: currentTab === 'login' }"
+                        @click="currentTab = 'login'" style="cursor: pointer;">
+                        登录
+                    </span>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container fade-in">
+            <!-- 会战查询 Tab -->
+            <div v-show="currentTab === 'clan_battle'">
+                <div class="card">
+                    <div class="tab-container">
+                        <button class="tab-btn" :class="{ active: clanBattle.mode === 'current' }"
+                            @click="clanBattle.mode = 'current'; loadClanBattleTime()">
+                            当期会战
+                        </button>
+                        <button class="tab-btn" :class="{ active: clanBattle.mode === 'history' }"
+                            @click="clanBattle.mode = 'history'; loadClanBattleHistory()">
+                            历史会战
+                        </button>
+                    </div>
+
+                    <div class="form-row">
+                        <!-- 当期模式：日期+时间 -->
+                        <template v-if="clanBattle.mode === 'current'">
+                            <div class="form-group" style="flex: 1;">
+                                <select class="form-control" v-model="clanBattle.selectedDate"
+                                    @change="updateTimeOptions">
+                                    <option v-for="(times, date) in clanBattle.timeData" :value="date">
+                                        {{ formatDate(date) }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <select class="form-control" v-model="clanBattle.selectedTime">
+                                    <option v-for="time in clanBattle.timeData[clanBattle.selectedDate]" :value="time">
+                                        {{ formatTime(time) }}
+                                    </option>
+                                </select>
+                            </div>
+                        </template>
+
+                        <!-- 历史模式：月份 -->
+                        <template v-else>
+                            <div class="form-group" style="flex: 2;">
+                                <select class="form-control" v-model="clanBattle.selectedHistory">
+                                    <option v-for="h in clanBattle.historyData" :value="h">{{ h }}</option>
+                                </select>
+                            </div>
+                        </template>
+
+                        <div class="form-group" style="flex: 2;">
+                            <input type="text" class="form-control" placeholder="公会名（支持正则）"
+                                v-model="clanBattle.searchText" @keyup.enter="searchClanBattle(0)">
+                        </div>
+                        <div class="form-group">
+                            <button class="btn" @click="searchClanBattle(0)" :disabled="clanBattle.loading">
+                                查询
+                            </button>
+                        </div>
+                        <div class="form-group">
+                            <button class="btn btn-secondary" @click="searchScoreLine()" :disabled="clanBattle.loading">
+                                查档线
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 会战结果表格 -->
+                <div class="card" v-if="clanBattle.results.length > 0">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>排名</th>
+                                <th>公会名</th>
+                                <th>人数</th>
+                                <th>会长</th>
+                                <th>分数</th>
+                                <th>周目</th>
+                                <th>上期</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in clanBattle.results">
+                                <td>{{ row.rank }}</td>
+                                <td>{{ row.clan_name }}</td>
+                                <td>{{ row.member_num }}</td>
+                                <td>{{ row.leader_name }}</td>
+                                <td>{{ row.damage?.toLocaleString() }}</td>
+                                <td>{{ row.lap }}</td>
+                                <td>{{ row.grade_rank }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="pagination">
+                        <button class="btn btn-secondary" @click="clanBattlePage(-1)"
+                            :disabled="clanBattle.page === 0">上一页</button>
+                        <span>{{ clanBattle.page + 1 }} / {{ clanBattle.maxPage }}</span>
+                        <button class="btn btn-secondary" @click="clanBattlePage(1)"
+                            :disabled="clanBattle.page >= clanBattle.maxPage - 1">下一页</button>
+                    </div>
+                </div>
+
+                <!-- 会战错误提示 -->
+                <div v-if="clanBattle.errorOccured" class="error">
+                    {{ clanBattle.errorMsg }}
+                </div>
+            </div>
+
+            <!-- 登录 Tab -->
+            <div v-show="currentTab === 'login'">
+                <!-- 登录/注册表单 -->
+                <div class="card" style="max-width: 400px; margin: 0 auto;">
+                    <div class="card-header">{{ auth.isRegisterMode ? '注册账号' : '登录' }}</div>
+
+                    <!-- 登录表单（竖向） -->
+                    <div v-if="!auth.isRegisterMode">
+                        <div class="form-group" style="margin-bottom: 0.8rem;">
+                            <input type="text" class="form-control" placeholder="用户名或QQ号" v-model="auth.loginId"
+                                @keyup.enter="login">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0.8rem;">
+                            <input type="password" class="form-control" placeholder="密码" v-model="auth.loginPassword"
+                                @keyup.enter="login">
+                        </div>
+                        <button class="btn" style="width: 100%;" @click="login" :disabled="auth.loading">
+                            登录
+                        </button>
+                    </div>
+
+                    <!-- 注册表单（竖向） -->
+                    <div v-else>
+                        <div class="form-group" style="margin-bottom: 0.8rem;">
+                            <input type="text" class="form-control" placeholder="用户名" v-model="auth.registerUsername">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0.8rem;">
+                            <input type="password" class="form-control" placeholder="密码（至少6位）"
+                                v-model="auth.registerPassword">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0.8rem;">
+                            <input type="text" class="form-control" placeholder="QQ号" v-model="auth.registerQQ">
+                        </div>
+                        <!-- 验证码已移除 -->
+                        <button class="btn" style="width: 100%;" @click="register" :disabled="auth.loading">
+                            注册
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 1rem; text-align: center;">
+                        <a href="#" @click.prevent="auth.isRegisterMode = !auth.isRegisterMode"
+                            style="color: var(--primary-color); text-decoration: none;">
+                            {{ auth.isRegisterMode ? '已有账号？去登录' : '没有账号？去注册' }}
+                        </a>
+                    </div>
+                    <div class="error" v-if="auth.error" style="margin-top: 0.5rem; text-align: center;">{{ auth.error
+                        }}</div>
+                </div>
+            </div>
+
+            <!-- 全局待审核提示 -->
+            <div class="container fade-in" v-if="auth.isLoggedIn && auth.status === 'pending'"
+                style="margin-top: 2rem;">
+                <div class="card" style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">⏳</div>
+                    <h3>账号审核中</h3>
+                    <p style="color: var(--text-muted);">您的账号正在等待管理员审核，请耐心等待或联系管理员。</p>
+                    <button class="btn btn-secondary" @click="logout" style="margin-top: 1rem;">登出</button>
+                    <button class="btn" @click="checkStatus" style="margin-top: 1rem; margin-left: 0.5rem;"
+                        :disabled="auth.loading">刷新状态</button>
+                </div>
+            </div>
+
+            <!-- 管理面板 Tab -->
+            <div v-show="currentTab === 'admin' && auth.role === 'admin'">
+                <div class="card">
+                    <div class="card-header">用户管理 ({{ admin.users.length }})</div>
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户名</th>
+                                    <th>QQ</th>
+                                    <th>角色</th>
+                                    <th>状态</th>
+                                    <th>注册时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="user in admin.users" :key="user.id">
+                                    <td>{{ user.id }}</td>
+                                    <td>{{ user.username }}</td>
+                                    <td>{{ user.qq_number }}</td>
+                                    <td>{{ user.role }}</td>
+                                    <td>
+                                        <span
+                                            :style="{ color: user.status === 'active' ? 'var(--success-color, green)' : 'var(--warning-color, orange)' }">
+                                            {{ user.status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ formatDate(user.created_at) }}</td>
+                                    <td>
+                                        <button v-if="user.status === 'pending'" class="btn"
+                                            @click="adminApproveUser(user.id)" :disabled="admin.loading">
+                                            通过
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 公会查询 Tab -->
+            <div v-show="currentTab === 'clan' && (!auth.isLoggedIn || auth.status === 'active')">
+                <div class="card">
+                    <div class="tab-container">
+                        <button class="tab-btn" :class="{ active: clan.mode === 'history' }"
+                            @click="clan.mode = 'history'">
+                            公会历史
+                        </button>
+                        <!-- Future tabs -->
+                    </div>
+
+                    <!-- 公会历史查询表单 -->
+                    <div v-if="clan.mode === 'history'">
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 2;">
+                                <input type="text" class="form-control" placeholder="公会名" v-model="clan.searchName"
+                                    @keyup.enter="searchClanHistory">
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <input type="number" class="form-control" placeholder="公会ID" v-model="clan.searchId"
+                                    @keyup.enter="searchClanHistory">
+                            </div>
+                            <div class="form-group">
+                                <button class="btn" @click="searchClanHistory" :disabled="clan.loading">
+                                    查询
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 公会历史结果 -->
+                <div class="card" v-if="clan.result">
+                    <div class="card-header">{{ clan.result.clan_name }}({{ clan.result.clan_id }}) 历史排名</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>期次</th>
+                                <th>公会名</th>
+                                <th>排名</th>
+                                <th>人数</th>
+                                <th>会长</th>
+                                <th>会长ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="h in clan.result.history">
+                                <td>{{ h.period }}</td>
+                                <td>{{ h.clan_name }}</td>
+                                <td>{{ h.ranking }}{{ h.is_estimate ? '*' : '' }}</td>
+                                <td>{{ h.member_num }}</td>
+                                <td>{{ h.leader_name }}</td>
+                                <td>{{ h.leader_viewer_id }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">* 表示当期预估排名</p>
+                </div>
+
+                <div class="error" v-if="clan.error">{{ clan.error }}</div>
+            </div>
+
+            <!-- 双场排名 Tab -->
+            <div v-show="currentTab === 'grand' && (!auth.isLoggedIn || auth.status === 'active')">
+                <div class="card">
+                    <div class="tab-container">
+                        <button class="tab-btn" :class="{ active: grand.mode === 'param_ranking' }"
+                            @click="grand.mode = 'param_ranking'">
+                            P场胜场数
+                        </button>
+                    </div>
+
+                    <div v-if="grand.mode === 'param_ranking'">
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 1;">
+                                <select class="form-control" v-model="grand.group" @change="searchGrandWinning">
+                                    <option value="0">全部分场</option>
+                                    <option v-for="g in 10" :value="g">{{ g }} 场</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <select class="form-control" v-model="grand.limit" @change="searchGrandWinning">
+                                    <option value="50">前 50</option>
+                                    <option value="100">前 100</option>
+                                    <option value="200">前 200</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <button class="btn" @click="searchGrandWinning" :disabled="grand.loading">
+                                    刷新
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" v-if="grand.results.length > 0">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>玩家名</th>
+                                <th>胜场</th>
+                                <th>当前排名</th>
+                                <th>分场</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in grand.results">
+                                <td>{{ row.rank }}</td>
+                                <td>{{ row.user_name }}</td>
+                                <td>{{ row.winning_number }}</td>
+                                <td>{{ row.grand_arena_rank }}</td>
+                                <td>{{ row.grand_arena_group }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 玩家查询 Tab -->
+            <div v-show="currentTab === 'player' && (!auth.isLoggedIn || auth.status === 'active')">
+                <div class="card">
+                    <div class="tab-container">
+                        <button class="tab-btn" :class="{ active: player.mode === 'clan_history' }"
+                            @click="player.mode = 'clan_history'">
+                            玩家公会历史
+                        </button>
+                        <button class="tab-btn" :class="{ active: player.mode === 'search' }"
+                            @click="player.mode = 'search'; loadPeriodOptions()">
+                            玩家查询
+                        </button>
+                    </div>
+
+                    <!-- 公会历史查询表单 -->
+                    <div v-if="player.mode === 'clan_history'">
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 3;">
+                                <input type="number" class="form-control" placeholder="输入 13 位 viewer_id"
+                                    v-model="player.viewerId" @keyup.enter="searchPlayerHistory">
+                            </div>
+                            <div class="form-group">
+                                <button class="btn" @click="searchPlayerHistory" :disabled="player.loading">
+                                    查询
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 玩家搜索表单 -->
+                    <div v-if="player.mode === 'search'">
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 1;">
+                                <select class="form-control" v-model="player.searchPeriod">
+                                    <option v-for="p in player.periodOptions" :value="p">{{ p }}</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 2;">
+                                <input type="text" class="form-control" placeholder="玩家名（模糊匹配）"
+                                    v-model="player.searchName" @keyup.enter="searchPlayers">
+                            </div>
+                            <div class="form-group">
+                                <button class="btn" @click="searchPlayers" :disabled="player.loading">
+                                    查询
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 公会历史结果 -->
+                <div class="card" v-if="player.mode === 'clan_history' && player.result">
+                    <div class="card-header">{{ player.result.user_name }} 公会历史</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>期次</th>
+                                <th>公会</th>
+                                <th>公会排名</th>
+                                <th>等级</th>
+                                <th>战力</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="h in player.result.history">
+                                <td>{{ h.period }}</td>
+                                <td>{{ h.clan_name }}</td>
+                                <td>{{ h.clan_ranking }}</td>
+                                <td>{{ h.level }}</td>
+                                <td>{{ h.total_power?.toLocaleString() }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 玩家搜索结果 -->
+                <div class="card" v-if="player.mode === 'search' && player.searchResults.length > 0">
+                    <div class="card-header">搜索结果 ({{ player.searchResults.length }})</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>玩家名</th>
+                                <th>等级</th>
+                                <th>战力</th>
+                                <th>公会</th>
+                                <th>Viewer ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(row, idx) in player.searchResults">
+                                <td>{{ idx + 1 }}</td>
+                                <td>{{ row.name }}</td>
+                                <td>{{ row.level }}</td>
+                                <td>{{ row.total_power?.toLocaleString() }}</td>
+                                <td>{{ row.clan_name }}</td>
+                                <td>{{ row.viewer_id }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="error" v-if="player.error">{{ player.error }}</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+
+</html>

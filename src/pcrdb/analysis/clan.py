@@ -3,14 +3,10 @@
 """
 from typing import Dict, List, Optional
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from db.connection import get_connection
+from ..db.connection import get_connection
 
 
-def get_clan_history(clan_id: int = None, clan_name: str = None) -> Dict:
+def get_clan_history(clan_id: int = None, clan_name: str = None, limit: int = 10) -> Dict:
     """
     获取公会的月度历史（排名、成员数、会长）
     
@@ -124,12 +120,16 @@ def get_clan_history(clan_id: int = None, clan_name: str = None) -> Dict:
     history.reverse()
 
     # 获取最新的公会名
-    latest_name = periods[-1]['clan_name'] if periods else None
+    # latest_name = periods_raw[-1]['clan_name'] if periods_raw else None # This line is no longer needed as clan_name is taken from the first item in reversed history
     
     
+    # Apply limit if specified
+    if limit > 0:
+        history = history[:limit]
+
     return {
         'clan_id': clan_id,
-        'clan_name': latest_name,
+        'clan_name': history[0]['clan_name'] if history else (clan_name or "Unknown"),
         'history': history
     }
 

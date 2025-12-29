@@ -1,13 +1,29 @@
 """
 玩家分析模块
 """
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from ..db.connection import get_connection
 
-from db.connection import get_connection
+
+def get_available_periods() -> List[str]:
+    """
+    获取数据库中有玩家数据的月份列表
+    
+    Returns:
+        ["2024-12", "2024-11", ...] 按时间倒序
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT DISTINCT to_char(collected_at, 'YYYY-MM') as period
+        FROM player_clan_snapshots
+        ORDER BY period DESC
+    """)
+    
+    rows = cursor.fetchall()
+    return [row[0] for row in rows]
 
 
 def get_player_clan_history(viewer_id: int) -> Dict:
@@ -94,3 +110,66 @@ def get_player_clan_history(viewer_id: int) -> Dict:
         'user_name': latest_name,
         'history': history
     }
+
+
+def search_players_by_name(name_pattern: str, period: str = None, limit: int = 50) -> List[Dict]:
+    """
+    模糊搜索玩家名，按战力倒序排列
+    
+    Args:
+        name_pattern: 玩家名模糊匹配
+        period: 月份 (YYYY-MM)，None 为最近一期
+        limit: 返回数量
+    
+    Returns:
+        [{viewer_id, name, level, total_power, clan_name}, ...]
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # 如果没有指定 period，获取最近的月份
+    if not period:
+        cursor.execute("""
+            SELECT DISTINCT to_char(collected_at, 'YYYY-MM') as period
+            FROM player_clan_snapshots
+            ORDER BY period DESC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
+        if not row:
+            return []
+        period = row[0]
+    
+    # 搜索匹配的玩家，每个玩家只返回该月份最新的一条记录
+    # 使用 DISTINCT ON 去重，按战力倒序排列
+    cursor.execute("""
+        SELECT DISTINCT ON (viewer_id)
+            viewer_id,
+            name,
+            level,
+            total_power,
+            join_clan_name
+        FROM player_clan_snapshots
+        WHERE to_char(collected_at, 'YYYY-MM') = %s
+          AND name ILIKE %s
+        ORDER BY viewer_id, collected_at DESC
+    """, (period, f'%{name_pattern}%'))
+    
+    rows = cursor.fetchall()
+    
+    # 按战力倒序排序
+    results = []
+    for row in rows:
+        results.append({
+            'viewer_id': row[0],
+            'name': row[1],
+            'level': row[2],
+            'total_power': row[3],
+            'clan_name': row[4]
+        })
+    
+    # 按战力倒序排列
+    results.sort(key=lambda x: x['total_power'] or 0, reverse=True)
+    
+    return results[:limit]
+
