@@ -22,7 +22,8 @@ from src.pcrdb.auth import (
     authenticate_user, create_user, create_access_token,
     get_current_user, get_user_by_username, get_user_by_qq,
     log_api_call, verify_password, update_password,
-    get_current_active_user, get_current_admin_user, get_all_users, approve_user_status
+    get_current_active_user, get_current_admin_user, get_all_users, approve_user_status,
+    get_user_api_stats, get_user_api_details
 )
 
 app = FastAPI(
@@ -159,6 +160,44 @@ async def admin_approve_user(user_id: int, user: dict = Depends(get_current_admi
     return {"error": "操作失败"}
 
 
+@app.get("/api/admin/api_stats")
+async def admin_api_stats(user: dict = Depends(get_current_admin_user)):
+    """获取所有用户 API 调用统计"""
+    stats = get_user_api_stats()
+    return {
+        "stats": [
+            {
+                "user_id": s["id"],
+                "username": s["username"],
+                "qq_number": s["qq_number"],
+                "total_calls": s["total_calls"],
+                "last_call_at": s["last_call_at"].isoformat() if s["last_call_at"] else None
+            }
+            for s in stats
+        ]
+    }
+
+
+@app.get("/api/admin/api_stats/{user_id}")
+async def admin_api_details(
+    user_id: int,
+    limit: int = Query(50, description="返回数量"),
+    user: dict = Depends(get_current_admin_user)
+):
+    """获取指定用户 API 调用详情"""
+    details = get_user_api_details(user_id, limit)
+    return {
+        "details": [
+            {
+                "endpoint": d["endpoint"],
+                "query_params": d["query_params"],
+                "created_at": d["created_at"].isoformat() if d["created_at"] else None
+            }
+            for d in details
+        ]
+    }
+
+
 @app.get("/api/clan/history")
 async def api_clan_history(
     clan_id: Optional[int] = Query(None, description="公会 ID"),
@@ -167,7 +206,7 @@ async def api_clan_history(
     user: dict = Depends(get_current_active_user)
 ):
     """获取公会历史排名（需要激活账号）"""
-    log_api_call(user["id"], "clan_history")
+    log_api_call(user["id"], "clan_history", {"clan_id": clan_id, "clan_name": clan_name})
     if not clan_id and not clan_name:
         return {"error": "请提供 clan_id 或 clan_name"}
     
@@ -179,7 +218,7 @@ async def api_clan_power_ranking(
     user: dict = Depends(get_current_active_user)
 ):
     """获取公会战力/人数排名（需要激活账号）"""
-    log_api_call(user["id"], "clan_power")
+    log_api_call(user["id"], "clan_power", {})
     return get_clan_power_ranking()
 
 
@@ -190,7 +229,7 @@ async def api_grand_winning(
     user: dict = Depends(get_current_active_user)
 ):
     """获取 PJJC 胜场排名（需要激活账号）"""
-    log_api_call(user["id"], "grand_winning")
+    log_api_call(user["id"], "grand_winning", {"group": group, "limit": limit})
     return get_winning_ranking(group=group, limit=limit)
 
 
@@ -200,7 +239,7 @@ async def api_player_history(
     user: dict = Depends(get_current_active_user)
 ):
     """获取玩家公会历史（需要激活账号）"""
-    log_api_call(user["id"], "player_history")
+    log_api_call(user["id"], "player_history", {"viewer_id": viewer_id})
     return get_player_clan_history(viewer_id=viewer_id)
 
 
@@ -212,7 +251,7 @@ async def api_player_search(
     user: dict = Depends(get_current_active_user)
 ):
     """搜索玩家（需要激活账号）"""
-    log_api_call(user["id"], "player_search")
+    log_api_call(user["id"], "player_search", {"name": name, "period": period, "limit": limit})
     return search_players_by_name(name_pattern=name, period=period, limit=limit)
 
 

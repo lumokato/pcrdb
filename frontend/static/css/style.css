@@ -310,6 +310,35 @@ tr:hover {
     margin-top: 1rem;
 }
 
+/* 弹窗 */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    z-index: 9999;
+    padding-top: 100px;
+    box-sizing: border-box;
+}
+
+.modal-content {
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    min-width: 350px;
+    max-width: 90%;
+    max-height: calc(100vh - 100px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    overflow: auto;
+    background-color: var(--bg-color);
+}
+
 /* 动画 */
 @keyframes fadeIn {
     from {
@@ -328,42 +357,9 @@ tr:hover {
 }
 
 /* 桌面端表格列宽 */
+/* 桌面端表格列宽：已移至 HTML 中定义，以适应不同页面的表格结构 */
 @media (min-width: 769px) {
-    th:nth-child(1) {
-        width: 80px;
-    }
-
-    /* 排名 */
-    th:nth-child(2) {
-        width: 220px;
-    }
-
-    /* 公会名/玩家名 */
-    th:nth-child(3) {
-        width: 80px;
-    }
-
-    /* 人数 */
-    th:nth-child(4) {
-        width: 150px;
-    }
-
-    /* 会长名 */
-    th:nth-child(5) {
-        width: 150px;
-    }
-
-    /* 分数 */
-    th:nth-child(6) {
-        width: 100px;
-    }
-
-    /* 周目 */
-    th:nth-child(7) {
-        width: 100px;
-    }
-
-    /* 上期 */
+    /* 保持响应式断点但不放固定列宽 */
 }
 
 /* 移动端响应式 */

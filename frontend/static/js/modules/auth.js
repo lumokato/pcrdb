@@ -30,7 +30,16 @@ export function useAuth(currentTab) {
     // 管理员状态
     const admin = reactive({
         loading: false,
-        users: []
+        users: [],
+        // API 统计
+        statsLoading: false,
+        apiStats: [],
+        showDetails: false,
+        detailsUser: '',
+        apiDetails: [],
+        // 用户信息弹窗
+        showUserInfo: false,
+        userInfoData: {}
     });
 
     // 带认证的 fetch
@@ -201,10 +210,50 @@ export function useAuth(currentTab) {
         }
     };
 
+    // 管理员：获取 API 调用统计
+    const loadApiStats = async () => {
+        if (auth.role !== 'admin') return;
+        admin.statsLoading = true;
+        try {
+            const res = await authFetch(`${LOCAL_API}/api/admin/api_stats`);
+            const data = await res.json();
+            if (data.stats) {
+                admin.apiStats = data.stats;
+            }
+        } catch (e) {
+            console.error('获取 API 统计失败', e);
+        } finally {
+            admin.statsLoading = false;
+        }
+    };
+
+    // 管理员：查看用户 API 详情
+    const showApiDetails = async (userId, username) => {
+        admin.detailsUser = username;
+        admin.apiDetails = [];
+        admin.showDetails = true;
+        try {
+            const res = await authFetch(`${LOCAL_API}/api/admin/api_stats/${userId}`);
+            const data = await res.json();
+            if (data.details) {
+                admin.apiDetails = data.details;
+            }
+        } catch (e) {
+            console.error('获取调用详情失败', e);
+        }
+    };
+
+    // 管理员：查看用户信息
+    const showUserInfo = (user) => {
+        admin.userInfoData = user;
+        admin.showUserInfo = true;
+    };
+
     // 监听 Tab 切换加载管理员数据
     watch(currentTab, (newTab) => {
         if (newTab === 'admin' && auth.role === 'admin') {
             adminGetUsers();
+            loadApiStats();
         }
     });
 
@@ -218,6 +267,9 @@ export function useAuth(currentTab) {
         logout,
         checkStatus,
         adminGetUsers,
-        adminApproveUser
+        adminApproveUser,
+        loadApiStats,
+        showApiDetails,
+        showUserInfo
     };
 }

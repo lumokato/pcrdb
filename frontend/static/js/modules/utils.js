@@ -42,6 +42,23 @@ export function formatTime(str) {
 }
 
 /**
+ * 格式化日期时间（用于 API 调用记录）
+ */
+export function formatDateTime(str) {
+    if (!str) return '';
+    try {
+        const d = new Date(str);
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hour = String(d.getHours()).padStart(2, '0');
+        const minute = String(d.getMinutes()).padStart(2, '0');
+        return `${month}/${day} ${hour}:${minute}`;
+    } catch (e) {
+        return str;
+    }
+}
+
+/**
  * 带认证的 fetch 封装
  */
 export function createAuthFetch(getToken) {

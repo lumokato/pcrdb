@@ -140,3 +140,30 @@ CREATE TABLE accounts (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-----------------------------------------------------------
+-- Auth Schema: 用户认证与授权
+-----------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS auth;
+
+-- Table: auth.users - 系统用户
+CREATE TABLE auth.users (
+    id SERIAL PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    qq_number TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL DEFAULT 'user',        -- 'admin' 或 'user'
+    status TEXT NOT NULL DEFAULT 'pending',   -- 'pending' 或 'active'
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Table: auth.api_logs - API 调用日志
+CREATE TABLE auth.api_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES auth.users(id),
+    endpoint TEXT NOT NULL,
+    query_params JSONB,                       -- 查询参数（如 {"clan_id": 123}）
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_api_logs_user ON auth.api_logs(user_id, created_at DESC);

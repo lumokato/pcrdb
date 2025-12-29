@@ -10,3 +10,4 @@ pyyaml
 python-dotenv
 fastapi
 uvicorn
+python-jose

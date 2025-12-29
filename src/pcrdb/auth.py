@@ -192,15 +192,55 @@ def approve_user_status(user_id: int) -> bool:
         conn.close()
 
 
-def log_api_call(user_id: int, endpoint: str):
+def log_api_call(user_id: int, endpoint: str, query_params: dict = None):
     """记录 API 调用日志"""
+    import json
     conn = get_auth_db()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO auth.api_logs (user_id, endpoint) VALUES (%s, %s)",
-            (user_id, endpoint)
+            "INSERT INTO auth.api_logs (user_id, endpoint, query_params) VALUES (%s, %s, %s)",
+            (user_id, endpoint, json.dumps(query_params) if query_params else None)
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def get_user_api_stats() -> list:
+    """获取所有用户的 API 调用统计"""
+    conn = get_auth_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                u.id,
+                u.username,
+                u.qq_number,
+                COUNT(l.id) as total_calls,
+                MAX(l.created_at) as last_call_at
+            FROM auth.users u
+            LEFT JOIN auth.api_logs l ON u.id = l.user_id
+            GROUP BY u.id, u.username, u.qq_number
+            ORDER BY total_calls DESC
+        """)
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+
+def get_user_api_details(user_id: int, limit: int = 50) -> list:
+    """获取指定用户的 API 调用详情"""
+    conn = get_auth_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT endpoint, query_params, created_at
+            FROM auth.api_logs
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (user_id, limit))
+        return cursor.fetchall()
     finally:
         conn.close()

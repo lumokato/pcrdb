@@ -9,7 +9,7 @@ PORT = 8433
 
 class ESModuleHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=".", **kwargs)
+        super().__init__(*args, directory="frontend", **kwargs)
     
     def guess_type(self, path):
         if path.endswith('.js'):

@@ -223,42 +223,110 @@
             <!-- 管理面板 Tab -->
             <div v-show="currentTab === 'admin' && auth.role === 'admin'">
                 <div class="card">
-                    <div class="card-header">用户管理 ({{ admin.users.length }})</div>
+                    <div class="card-header">
+                        用户管理 ({{ admin.users.length }})
+                        <button class="btn btn-secondary" style="float: right; padding: 0.3rem 0.8rem;"
+                            @click="loadApiStats" :disabled="admin.statsLoading">
+                            刷新
+                        </button>
+                    </div>
                     <div style="overflow-x: auto;">
-                        <table>
+                        <table class="admin-table">
                             <thead>
                                 <tr>
-                                    <th>ID</th>
-                                    <th>用户名</th>
-                                    <th>QQ</th>
-                                    <th>角色</th>
-                                    <th>状态</th>
-                                    <th>注册时间</th>
-                                    <th>操作</th>
+                                    <th style="width: 60px; text-align: center;">ID</th>
+                                    <th style="width: 180px;">用户名</th>
+                                    <th style="width: 100px; text-align: center;">用户信息</th>
+                                    <th style="width: 80px; text-align: center;">状态</th>
+                                    <th style="width: 100px; text-align: center;">调用次数</th>
+                                    <th style="width: 160px; text-align: center;">最后调用</th>
+                                    <th style="width: 100px; text-align: center;">调用详情</th>
+                                    <th style="width: 80px; text-align: center;">操作</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="user in admin.users" :key="user.id">
-                                    <td>{{ user.id }}</td>
+                                    <td style="text-align: center;">{{ user.id }}</td>
                                     <td>{{ user.username }}</td>
-                                    <td>{{ user.qq_number }}</td>
-                                    <td>{{ user.role }}</td>
-                                    <td>
+                                    <td style="text-align: center;">
+                                        <button class="btn btn-secondary" @click="showUserInfo(user)"
+                                            style="padding: 0.2rem 0.3rem; font-size: 0.85rem;">
+                                            信息
+                                        </button>
+                                    </td>
+                                    <td style="text-align: center;">
                                         <span
                                             :style="{ color: user.status === 'active' ? 'var(--success-color, green)' : 'var(--warning-color, orange)' }">
                                             {{ user.status }}
                                         </span>
                                     </td>
-                                    <td>{{ formatDate(user.created_at) }}</td>
-                                    <td>
+                                    <td style="text-align: center;">{{ getApiCallCount(user.id) }}</td>
+                                    <td style="white-space: nowrap; text-align: center;">{{ getLastCallTime(user.id) }}
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <button class="btn btn-secondary"
+                                            @click="showApiDetails(user.id, user.username)"
+                                            style="padding: 0.2rem 0.3rem; font-size: 0.85rem;">
+                                            查看
+                                        </button>
+                                    </td>
+                                    <td style="text-align: center;">
                                         <button v-if="user.status === 'pending'" class="btn"
-                                            @click="adminApproveUser(user.id)" :disabled="admin.loading">
+                                            @click="adminApproveUser(user.id)" :disabled="admin.loading"
+                                            style="padding: 0.2rem 0.3rem; font-size: 0.85rem;">
                                             通过
                                         </button>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- 用户信息弹窗 -->
+                <div v-if="admin.showUserInfo" class="modal-overlay" @click.self="admin.showUserInfo = false">
+                    <div class="modal-content" style="min-width: 300px;">
+                        <div class="card-header">
+                            用户信息
+                            <span style="float: right; cursor: pointer;" @click="admin.showUserInfo = false">✕</span>
+                        </div>
+                        <div style="padding: 0.5rem 0;">
+                            <p><strong>用户名：</strong>{{ admin.userInfoData.username }}</p>
+                            <p><strong>QQ：</strong>{{ admin.userInfoData.qq_number }}</p>
+                            <p><strong>角色：</strong>{{ admin.userInfoData.role }}</p>
+                            <p><strong>状态：</strong>{{ admin.userInfoData.status }}</p>
+                            <p><strong>注册时间：</strong>{{ formatDate(admin.userInfoData.created_at) }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API 调用详情弹窗 -->
+                <div v-if="admin.showDetails" class="modal-overlay" @click.self="admin.showDetails = false">
+                    <div class="modal-content">
+                        <div class="card-header">
+                            {{ admin.detailsUser }} 的调用记录
+                            <span style="float: right; cursor: pointer;" @click="admin.showDetails = false">✕</span>
+                        </div>
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>接口</th>
+                                        <th>参数</th>
+                                        <th>时间</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="d in admin.apiDetails">
+                                        <td>{{ d.endpoint }}</td>
+                                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                                            {{ d.query_params ? JSON.stringify(d.query_params) : '-' }}
+                                        </td>
+                                        <td style="white-space: nowrap;">{{ formatDateTime(d.created_at) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

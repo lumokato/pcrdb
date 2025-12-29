@@ -2,7 +2,7 @@
  * PCR 数据工具箱 - 前端 Vue 应用
  * 入口文件 - 组合各功能模块
  */
-import { formatDate, formatTime } from './modules/utils.js';
+import { formatDate, formatTime, formatDateTime } from './modules/utils.js';
 import { useAuth } from './modules/auth.js';
 import { useClanBattle } from './modules/clanBattle.js';
 import { useClan } from './modules/clan.js';
@@ -23,7 +23,7 @@ createApp({
         const {
             auth, admin, authFetch,
             initAuth, login, register, logout, checkStatus,
-            adminGetUsers, adminApproveUser
+            adminGetUsers, adminApproveUser, loadApiStats, showApiDetails, showUserInfo
         } = useAuth(currentTab);
 
         const {
@@ -49,6 +49,18 @@ createApp({
                 isDarkMode.value = true;
                 document.body.classList.add('dark-mode');
             }
+        };
+
+        // 辅助函数：获取用户调用次数
+        const getApiCallCount = (userId) => {
+            const stat = admin.apiStats.find(s => s.user_id === userId);
+            return stat ? stat.total_calls : 0;
+        };
+
+        // 辅助函数：获取用户最后调用时间
+        const getLastCallTime = (userId) => {
+            const stat = admin.apiStats.find(s => s.user_id === userId);
+            return stat && stat.last_call_at ? formatDateTime(stat.last_call_at) : '-';
         };
 
         // 初始化
@@ -98,7 +110,13 @@ createApp({
             admin,
             checkStatus,
             adminGetUsers,
-            adminApproveUser
+            adminApproveUser,
+            loadApiStats,
+            showApiDetails,
+            showUserInfo,
+            formatDateTime,
+            getApiCallCount,
+            getLastCallTime
         };
     }
 }).mount('#app');
