@@ -43,8 +43,12 @@ def insert_grand_ranking(ranking_list: List[Dict], group: int):
     now = datetime.now()
     
     for user in ranking_list:
-        # Schema: viewer_id, collected_at, user_name, team_level, 
-        # grand_arena_rank, grand_arena_group, winning_number, favorite_unit
+        # favorite_unit 可能是字典或直接是 id
+        fav_unit = user.get('favorite_unit')
+        
+        favorite_unit_id = fav_unit.get('id', 0)
+
+ 
         
         record = {
             'viewer_id': user['viewer_id'],
@@ -53,7 +57,7 @@ def insert_grand_ranking(ranking_list: List[Dict], group: int):
             'grand_arena_rank': user.get('rank', 0),
             'grand_arena_group': group,
             'winning_number': user.get('winning_number', 0),
-            'favorite_unit': user.get('favorite_unit', {}).get('id', 0) if user.get('favorite_unit') else 0
+            'favorite_unit': favorite_unit_id
         }
         records.append(record)
     

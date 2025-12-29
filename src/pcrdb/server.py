@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / '.env')
 
-from src.pcrdb.analysis.clan import get_clan_history, get_clan_power_ranking
+from src.pcrdb.analysis.clan import get_clan_history, get_clan_power_ranking, get_clan_members, get_top_clans, get_top_clan_profiles
 from src.pcrdb.analysis.grand import get_winning_ranking
 from src.pcrdb.analysis.player import get_player_clan_history, search_players_by_name, get_available_periods
 from src.pcrdb.auth import (
@@ -202,7 +202,7 @@ async def admin_api_details(
 async def api_clan_history(
     clan_id: Optional[int] = Query(None, description="公会 ID"),
     clan_name: Optional[str] = Query(None, description="公会名"),
-    limit: int = 10,
+    limit: int = 0,
     user: dict = Depends(get_current_active_user)
 ):
     """获取公会历史排名（需要激活账号）"""
@@ -211,6 +211,56 @@ async def api_clan_history(
         return {"error": "请提供 clan_id 或 clan_name"}
     
     return get_clan_history(clan_id=clan_id, clan_name=clan_name, limit=limit)
+
+
+@app.get("/api/clan/members")
+async def api_clan_members(
+    clan_id: Optional[int] = Query(None, description="公会 ID"),
+    clan_name: Optional[str] = Query(None, description="公会名"),
+    period: Optional[str] = Query(None, description="月份 YYYY-MM"),
+    user: dict = Depends(get_current_active_user)
+):
+    """获取公会成员列表（需要激活账号）"""
+    log_api_call(user["id"], "clan_members", {"clan_id": clan_id, "clan_name": clan_name, "period": period})
+    return get_clan_members(clan_id=clan_id, clan_name=clan_name, period=period)
+
+
+@app.get("/api/clan/profiles")
+async def api_clan_profiles(
+    date: Optional[str] = Query(None, description="日期 YYYY-MM-DD"),
+    clan_id: Optional[int] = Query(None, description="公会 ID"),
+    user: dict = Depends(get_current_active_user)
+):
+    """获取前排公会成员详细资料（需要激活账号）"""
+    log_api_call(user["id"], "clan_profiles", {"date": date, "clan_id": clan_id})
+    return get_top_clan_profiles(date=date, clan_id=clan_id)
+
+
+@app.get("/api/clan/top_clans")
+async def api_top_clans(
+    period: Optional[str] = Query(None, description="月份 YYYY-MM"),
+    user: dict = Depends(get_current_active_user)
+):
+    """获取前30公会列表（需要激活账号）"""
+    log_api_call(user["id"], "top_clans", {"period": period})
+    return get_top_clans(period=period)
+
+
+@app.get("/api/clan/profile_dates")
+async def api_profile_dates(
+    user: dict = Depends(get_current_active_user)
+):
+    """获取可用的 profile 日期列表"""
+    from src.pcrdb.db.connection import get_connection
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT to_char(collected_at, 'YYYY-MM-DD') as date
+        FROM player_profile_snapshots
+        ORDER BY date DESC
+    """)
+    rows = cursor.fetchall()
+    return [row[0] for row in rows]
 
 
 @app.get("/api/clan/power_ranking")

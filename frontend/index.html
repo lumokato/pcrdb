@@ -121,13 +121,13 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>排名</th>
-                                <th>公会名</th>
-                                <th>人数</th>
-                                <th>会长</th>
-                                <th>分数</th>
-                                <th>周目</th>
-                                <th>上期</th>
+                                <th style="width: 60px;">排名</th>
+                                <th style="width: 200px;">公会名</th>
+                                <th style="width: 60px;">人数</th>
+                                <th style="width: 140px;">会长</th>
+                                <th style="width: 160px;">分数</th>
+                                <th style="width: 60px;">周目</th>
+                                <th style="width: 60px;">上期</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -339,7 +339,14 @@
                             @click="clan.mode = 'history'">
                             公会历史
                         </button>
-                        <!-- Future tabs -->
+                        <button class="tab-btn" :class="{ active: clan.mode === 'details' }"
+                            @click="clan.mode = 'details'; loadClanPeriodOptions()">
+                            公会详情
+                        </button>
+                        <button class="tab-btn" :class="{ active: clan.mode === 'profiles' }"
+                            @click="clan.mode = 'profiles'; loadDateOptions()">
+                            日期历史
+                        </button>
                     </div>
 
                     <!-- 公会历史查询表单 -->
@@ -347,15 +354,39 @@
                         <div class="form-row">
                             <div class="form-group" style="flex: 2;">
                                 <input type="text" class="form-control" placeholder="公会名" v-model="clan.searchName"
-                                    @keyup.enter="searchClanHistory">
+                                    @input="clan.searchId = ''" @keyup.enter="searchClanHistory">
                             </div>
                             <div class="form-group" style="flex: 1;">
-                                <input type="number" class="form-control" placeholder="公会ID" v-model="clan.searchId"
-                                    @keyup.enter="searchClanHistory">
+                                <input type="text" class="form-control" placeholder="公会ID" v-model="clan.searchId"
+                                    @input="clan.searchName = ''" @keyup.enter="searchClanHistory">
                             </div>
                             <div class="form-group">
                                 <button class="btn" @click="searchClanHistory" :disabled="clan.loading">
-                                    查询
+                                    {{ clan.loading ? '查询中' : '查询' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 公会详情查询表单 -->
+                    <div v-if="clan.mode === 'details'">
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 1;">
+                                <select class="form-control" v-model="clan.searchPeriod">
+                                    <option v-for="p in clan.periodOptions" :value="p">{{ p }}</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 2;">
+                                <input type="text" class="form-control" placeholder="公会名" v-model="clan.searchName"
+                                    @input="clan.searchId = ''" @keyup.enter="searchClanDetails">
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <input type="text" class="form-control" placeholder="公会ID" v-model="clan.searchId"
+                                    @input="clan.searchName = ''" @keyup.enter="searchClanDetails">
+                            </div>
+                            <div class="form-group">
+                                <button class="btn" @click="searchClanDetails" :disabled="clan.loading">
+                                    {{ clan.loading ? '查询中' : '查询' }}
                                 </button>
                             </div>
                         </div>
@@ -363,7 +394,7 @@
                 </div>
 
                 <!-- 公会历史结果 -->
-                <div class="card" v-if="clan.result">
+                <div class="card" v-if="clan.mode === 'history' && clan.result">
                     <div class="card-header">{{ clan.result.clan_name }}({{ clan.result.clan_id }}) 历史排名</div>
                     <table>
                         <thead>
@@ -388,6 +419,107 @@
                         </tbody>
                     </table>
                     <p style="color: var(--text-muted); font-size: 0.9rem;">* 表示当期预估排名</p>
+                </div>
+
+                <!-- 公会详情结果 -->
+                <div class="card" v-if="clan.mode === 'details' && clan.detailsResult">
+                    <div class="card-header">{{ clan.detailsResult.clan_name }}({{ clan.detailsResult.clan_id }}) 共{{
+                        clan.detailsResult.member_count }}人</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>职务</th>
+                                <th>玩家名</th>
+                                <th>等级</th>
+                                <th>战力</th>
+                                <th>ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="m in clan.detailsResult.members" :key="m.viewer_id">
+                                <td>{{ m.role }}</td>
+                                <td>{{ m.name }}</td>
+                                <td>{{ m.level }}</td>
+                                <td>{{ m.total_power }}</td>
+                                <td>{{ m.viewer_id }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 前排成员查询表单 -->
+                <div class="card" v-if="clan.mode === 'profiles'">
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 1;">
+                            <select class="form-control" v-model="clan.searchDate" @change="loadTopClans()">
+                                <option v-for="d in clan.dateOptions" :value="d">{{ d }}</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 2;">
+                            <select class="form-control" v-model="clan.selectedClanId">
+                                <option value="">全部公会</option>
+                                <option v-for="c in clan.topClans" :value="c.clan_id">{{ c.ranking }}. {{ c.clan_name }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <button class="btn" @click="searchClanProfiles" :disabled="clan.loading">
+                                {{ clan.loading ? '查询中' : '查询' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 前排成员结果 -->
+                <div class="card" v-if="clan.mode === 'profiles' && clan.profilesResult">
+                    <div class="card-header">前排公会成员 共{{ clan.profilesResult.count }}人</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th @click="sortProfiles('join_clan_name')" style="cursor: pointer;">
+                                    公会 {{ clan.sortColumn === 'join_clan_name' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                                <th @click="sortProfiles('user_name')" style="cursor: pointer;">
+                                    玩家名 {{ clan.sortColumn === 'user_name' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                                <th @click="sortProfiles('team_level')" style="cursor: pointer;">
+                                    等级 {{ clan.sortColumn === 'team_level' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                                <th @click="sortProfiles('unit_num')" style="cursor: pointer;">
+                                    角色 {{ clan.sortColumn === 'unit_num' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                                <th @click="sortProfiles('total_power')" style="cursor: pointer;">
+                                    战力 {{ clan.sortColumn === 'total_power' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                                <th @click="sortProfiles('knight_level')" style="cursor: pointer;">
+                                    骑士等级 {{ clan.sortColumn === 'knight_level' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                                <th @click="sortProfiles('talent_done')" style="cursor: pointer;">
+                                    深域 {{ clan.sortColumn === 'talent_done' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                                <th @click="sortProfiles('arena_rank')" style="cursor: pointer;">
+                                    JJC {{ clan.sortColumn === 'arena_rank' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                                <th @click="sortProfiles('grand_arena_rank')" style="cursor: pointer;">
+                                    PJJC {{ clan.sortColumn === 'grand_arena_rank' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="p in clan.profilesResult.players" :key="p.viewer_id">
+                                <td>{{ p.join_clan_name }}</td>
+                                <td>{{ p.user_name }}</td>
+                                <td>{{ p.team_level }}</td>
+                                <td>{{ p.unit_num }}</td>
+                                <td>{{ p.total_power }}</td>
+                                <td>{{ p.knight_level }}</td>
+                                <td>{{ clan.profilesResult.talent_total - p.talent_done }}/{{
+                                    clan.profilesResult.talent_total }}</td>
+                                <td>{{ p.arena_rank }}</td>
+                                <td>{{ p.grand_arena_rank }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
 
                 <div class="error" v-if="clan.error">{{ clan.error }}</div>
@@ -507,20 +639,22 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>期次</th>
-                                <th>公会</th>
-                                <th>公会排名</th>
-                                <th>等级</th>
-                                <th>战力</th>
+                                <th style="width: 80px;">期次</th>
+                                <th style="width: 140px;">玩家名</th>
+                                <th style="width: 160px;">公会</th>
+                                <th style="width: 80px;">公会排名</th>
+                                <th style="width: 60px;">等级</th>
+                                <th style="width: 100px;">战力</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="h in player.result.history">
                                 <td>{{ h.period }}</td>
+                                <td>{{ h.player_name }}</td>
                                 <td>{{ h.clan_name }}</td>
                                 <td>{{ h.clan_ranking }}</td>
                                 <td>{{ h.level }}</td>
-                                <td>{{ h.total_power?.toLocaleString() }}</td>
+                                <td>{{ h.total_power }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -545,7 +679,7 @@
                                 <td>{{ idx + 1 }}</td>
                                 <td>{{ row.name }}</td>
                                 <td>{{ row.level }}</td>
-                                <td>{{ row.total_power?.toLocaleString() }}</td>
+                                <td>{{ row.total_power }}</td>
                                 <td>{{ row.clan_name }}</td>
                                 <td>{{ row.viewer_id }}</td>
                             </tr>

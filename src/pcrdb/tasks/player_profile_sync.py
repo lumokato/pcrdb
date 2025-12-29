@@ -147,7 +147,11 @@ def process_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
     }
     
     # 提取骑士经验
-    princess_knight_exp = profile_data.get('princess_knight_info', {}).get('total_exp', 0)
+    princess_knight_exp = user.get('princess_knight_rank_total_exp', 0)
+
+    favorite_unit_id = profile_data['favorite_unit']['id']
+
+    user_comment = user.get('user_comment')
     
     return {
         'viewer_id': vid,
@@ -159,8 +163,8 @@ def process_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
         'arena_group': user.get('arena_group', 0),
         'grand_arena_rank': user.get('grand_arena_rank', 0),
         'grand_arena_group': user.get('grand_arena_group', 0),
-        'favorite_unit': user.get('favorite_unit', {}).get('id', 0) if user.get('favorite_unit') else 0,
-        'user_comment': user.get('user_comment', {}).get('comment', '') if user.get('user_comment') else '',
+        'favorite_unit': favorite_unit_id,
+        'user_comment': user_comment,
         'princess_knight_rank_total_exp': princess_knight_exp,
         'talent_quest_clear': talent_json
     }

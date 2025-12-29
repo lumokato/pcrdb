@@ -32,7 +32,7 @@ createApp({
             updateTimeOptions, searchClanBattle, searchScoreLine, clanBattlePage
         } = useClanBattle();
 
-        const { clan, searchClanHistory } = useClan(authFetch, logout);
+        const { clan, searchClanHistory, searchClanDetails, loadPeriodOptions: loadClanPeriodOptions, searchClanProfiles, sortProfiles, loadTopClans, loadDateOptions } = useClan(authFetch, logout);
         const { grand, searchGrandWinning } = useGrand(authFetch, logout);
         const { player, loadPeriodOptions, searchPlayerHistory, searchPlayers } = usePlayer(authFetch, logout);
 
@@ -62,6 +62,23 @@ createApp({
             const stat = admin.apiStats.find(s => s.user_id === userId);
             return stat && stat.last_call_at ? formatDateTime(stat.last_call_at) : '-';
         };
+
+        // 过滤日期历史
+        const filteredProfiles = Vue.computed(() => {
+            if (!clan.profilesResult || !clan.profilesResult.players) return [];
+            if (!clan.filterClan) return clan.profilesResult.players;
+            return clan.profilesResult.players.filter(p => p.join_clan_name === clan.filterClan);
+        });
+
+        // 公会选项列表
+        const clanOptions = Vue.computed(() => {
+            if (!clan.profilesResult || !clan.profilesResult.players) return [];
+            const clanSet = new Set();
+            clan.profilesResult.players.forEach(p => {
+                if (p.join_clan_name) clanSet.add(p.join_clan_name);
+            });
+            return Array.from(clanSet);
+        });
 
         // 初始化
         onMounted(() => {
@@ -95,6 +112,12 @@ createApp({
             // 公会
             clan,
             searchClanHistory,
+            searchClanDetails,
+            searchClanProfiles,
+            sortProfiles,
+            loadClanPeriodOptions,
+            loadTopClans,
+            loadDateOptions,
 
             // 双场
             grand,

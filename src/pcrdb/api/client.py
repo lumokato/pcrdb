@@ -48,18 +48,26 @@ def _unpack(data: bytes):
 
 def decrypt(encrypted: bytes) -> dict:
     """解密服务器响应"""
-    data = base64.b64decode(encrypted)
-    key = data[-32:]
-    data = data[:-32]
-    
-    cryptor = AES.new(key, AES.MODE_CBC, _IV)
-    plain = cryptor.decrypt(data)
-    
     try:
-        return msgpack.unpackb(plain[:-plain[-1]], strict_map_key=False)
+        data = base64.b64decode(encrypted)
+        key = data[-32:]
+        data = data[:-32]
+        
+        cryptor = AES.new(key, AES.MODE_CBC, _IV)
+        plain = cryptor.decrypt(data)
+        
+        result = msgpack.unpackb(plain[:-plain[-1]], strict_map_key=False)
+        if isinstance(result, dict):
+            return result
+        else:
+            print(f"\n[DECRYPT] Unexpected type: {type(result).__name__} = {str(result)[:100]}")
+            return {"data_headers": {}, "data": {}}
     except msgpack.ExtraData as err:
-        return err.unpacked
-    except Exception:
+        if isinstance(err.unpacked, dict):
+            return err.unpacked
+        return {"data_headers": {}, "data": {}}
+    except Exception as e:
+        print(f"\n[DECRYPT ERROR] {e}")
         return {"data_headers": {}, "data": {}}
 
 
@@ -157,7 +165,14 @@ class PCRClient:
         else:
             result = loads(resp_data.decode())
         
+        # 确保 result 是字典
+        if not isinstance(result, dict):
+            print(f"\n[API ERROR] Unexpected result type from {endpoint}: {type(result).__name__} = {str(result)[:200]}")
+            return {}
+        
         ret_header = result.get("data_headers", {})
+        if not isinstance(ret_header, dict):
+            ret_header = {}
         
         # 更新版本
         if endpoint == "check/game_start" and "store_url" in ret_header:
@@ -177,7 +192,10 @@ class PCRClient:
         if ret_header.get("viewer_id") and ret_header["viewer_id"] != self.viewer_id:
             self.viewer_id = int(ret_header["viewer_id"])
         
-        return result.get("data", {})
+        data = result.get("data", {})
+        if not isinstance(data, dict):
+            return {}
+        return data
     
     async def login(self, uid: str, access_key: str) -> tuple:
         """登录游戏"""

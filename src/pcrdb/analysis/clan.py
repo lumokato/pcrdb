@@ -178,3 +178,319 @@ def get_clan_power_ranking(limit: int = 50) -> List[Dict]:
         })
     
     return result
+
+
+def get_clan_members(clan_id: int = None, clan_name: str = None, period: str = None) -> Dict:
+    """
+    获取指定月份的公会成员列表
+    
+    Args:
+        clan_id: 公会 ID
+        clan_name: 公会名 (如果 clan_id 为 None)
+        period: 月份 (YYYY-MM)，默认为最新月份
+        
+    Returns:
+        {clan_id, clan_name, member_count, members: [{viewer_id, name, level, ...}]}
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # 1. 确定 period
+    if not period:
+        cursor.execute("""
+            SELECT DISTINCT to_char(collected_at, 'YYYY-MM') as period
+            FROM player_clan_snapshots
+            ORDER BY period DESC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
+        if not row:
+            return {"error": "暂无数据"}
+        period = row[0]
+        
+    # 2. 如果只给了 clan_name，先找 clan_id (在指定月份存在)
+    if clan_id is None and clan_name:
+        cursor.execute("""
+            SELECT DISTINCT join_clan_id
+            FROM player_clan_snapshots
+            WHERE to_char(collected_at, 'YYYY-MM') = %s
+              AND join_clan_name = %s
+            LIMIT 1
+        """, (period, clan_name))
+        row = cursor.fetchone()
+        if not row:
+            return {"error": f"未找到公会: {clan_name} 在 {period}"}
+        clan_id = row[0]
+        
+    if clan_id is None:
+        return {"error": "请提供 clan_id 或 clan_name"}
+
+    # 3. 查询成员列表 (每个成员取该月最新的快照)
+    # role: 40=会长, 30=副会长
+    cursor.execute("""
+        SELECT DISTINCT ON (viewer_id)
+            viewer_id,
+            name,
+            level,
+            total_power,
+            role,
+            join_clan_name
+        FROM player_clan_snapshots
+        WHERE to_char(collected_at, 'YYYY-MM') = %s
+          AND join_clan_id = %s
+        ORDER BY viewer_id, collected_at DESC
+    """, (period, clan_id))
+    
+    rows = cursor.fetchall()
+    
+    members = []
+    clan_name_actual = None
+    
+    for row in rows:
+        vid, name, level, power, role_val, cname = row
+        if clan_name_actual is None:
+            clan_name_actual = cname
+            
+        role_str = ""
+        if role_val == 40:
+            role_str = "会长"
+        elif role_val == 30:
+            role_str = "副会长"
+            
+        members.append({
+            "viewer_id": vid,
+            "name": name,
+            "level": level,
+            "total_power": power,
+            "role": role_str,
+            "role_val": role_val or 0
+        })
+        
+    # 按职务排序 (会长>副会长>普通)，再按战力降序
+    members.sort(key=lambda x: (x['role_val'], x['total_power']), reverse=True)
+
+    return {
+        "clan_id": clan_id,
+        "clan_name": clan_name_actual or clan_name,
+        "period": period,
+        "member_count": len(members),
+        "members": members
+    }
+
+
+def _exp_to_knight_level(exp: int) -> str:
+    """
+    Convert princess_knight_rank_total_exp to knight level.
+    Level 1-125: Linear, slope 53235
+    Level 126-201: Linear, slope 53236
+    Level 202-251: Quadratic, acceleration 505
+    Returns "251+" if exceeds level 251.
+    """
+    if exp is None or exp <= 0:
+        return "0"
+    
+    # Cumulative exp at level boundaries
+    # Level 125: 125 * 53235 = 6654375
+    # Level 201: 6654375 + 76 * 53236 = 6654375 + 4045936 = 10700311
+    exp_at_125 = 125 * 53235  # 6654375
+    exp_at_201 = exp_at_125 + 76 * 53236  # 10700311
+    
+    if exp <= exp_at_125:
+        level = exp // 53235
+        return str(max(1, level))
+    elif exp <= exp_at_201:
+        level = 125 + (exp - exp_at_125) // 53236
+        return str(level)
+    else:
+        # Quadratic phase 202-251
+        # Each level requires: base + (level - 202) * 505
+        # Approximate by iterating
+        remaining = exp - exp_at_201
+        level = 201
+        step = 53236  # Starting step for level 202
+        while remaining > 0 and level < 251:
+            step += 505
+            if remaining >= step:
+                remaining -= step
+                level += 1
+            else:
+                break
+        
+        if level >= 251:
+            return "251+"
+        return str(level)
+
+
+def _count_talent_quest(talent_data) -> int:
+    """Count completed talent quest stages from JSON data."""
+    if not talent_data:
+        return 0
+    if isinstance(talent_data, dict):
+        # Format: {stage_id: difficulty_flags, ...}
+        count = 0
+        for stage_id, flags in talent_data.items():
+            if isinstance(flags, int):
+                # Count bits set (each bit = one difficulty)
+                count += bin(flags).count('1')
+            elif isinstance(flags, list):
+                count += len(flags)
+        return count
+    return 0
+
+
+def get_top_clans(period: str = None, limit: int = 30) -> Dict:
+    """
+    Get top clans (by ranking) for a given period from clan_snapshots.
+    
+    Args:
+        period: Month (YYYY-MM), defaults to latest
+        limit: Number of clans to return (default 30)
+        
+    Returns:
+        {period, clans: [{clan_id, clan_name, ranking}, ...]}
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Determine period
+    if not period:
+        cursor.execute("""
+            SELECT DISTINCT to_char(collected_at, 'YYYY-MM') as period
+            FROM clan_snapshots
+            ORDER BY period DESC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
+        if not row:
+            return {"error": "暂无数据"}
+        period = row[0]
+    
+    # Get top clans by ranking for the period
+    cursor.execute("""
+        SELECT DISTINCT ON (clan_id)
+            clan_id,
+            clan_name,
+            current_period_ranking
+        FROM clan_snapshots
+        WHERE to_char(collected_at, 'YYYY-MM') = %s
+          AND current_period_ranking > 0
+          AND current_period_ranking <= %s
+          AND exist = TRUE
+        ORDER BY clan_id, collected_at DESC
+    """, (period, limit))
+    
+    rows = cursor.fetchall()
+    
+    clans = []
+    for row in rows:
+        clans.append({
+            "clan_id": row[0],
+            "clan_name": row[1],
+            "ranking": row[2]
+        })
+    
+    # Sort by ranking
+    clans.sort(key=lambda x: x['ranking'])
+    
+    return {
+        "period": period,
+        "clans": clans
+    }
+
+
+def get_top_clan_profiles(date: str = None, clan_id: int = None) -> Dict:
+    """
+    Get player profiles for top 30 clans (synced daily by player_profile_sync).
+    
+    Args:
+        date: Date (YYYY-MM-DD), defaults to latest
+        clan_id: Clan ID to filter by
+        
+    Returns:
+        {date, talent_total, players: [{viewer_id, user_name, join_clan_name, ...}]}
+    """
+    import os
+    talent_total = int(os.getenv('TALENT_QUEST_TOTAL', 250))
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Determine date
+    if not date:
+        cursor.execute("""
+            SELECT DISTINCT to_char(collected_at, 'YYYY-MM-DD') as date
+            FROM player_profile_snapshots
+            ORDER BY date DESC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
+        if not row:
+            return {"error": "暂无数据"}
+        date = row[0]
+    
+    # Get players for the date
+    if clan_id:
+        cursor.execute("""
+            SELECT DISTINCT ON (viewer_id)
+                viewer_id,
+                user_name,
+                join_clan_name,
+                team_level,
+                unit_num,
+                total_power,
+                princess_knight_rank_total_exp,
+                talent_quest_clear,
+                arena_rank,
+                grand_arena_rank
+            FROM player_profile_snapshots
+            WHERE to_char(collected_at, 'YYYY-MM-DD') = %s
+              AND join_clan_id = %s
+            ORDER BY viewer_id, collected_at DESC
+        """, (date, clan_id))
+    else:
+        cursor.execute("""
+            SELECT DISTINCT ON (viewer_id)
+                viewer_id,
+                user_name,
+                join_clan_name,
+                team_level,
+                unit_num,
+                total_power,
+                princess_knight_rank_total_exp,
+                talent_quest_clear,
+                arena_rank,
+                grand_arena_rank
+            FROM player_profile_snapshots
+            WHERE to_char(collected_at, 'YYYY-MM-DD') = %s
+            ORDER BY viewer_id, collected_at DESC
+        """, (date,))
+    
+    rows = cursor.fetchall()
+    
+    players = []
+    for row in rows:
+        (viewer_id, user_name, clan_name, team_level, unit_num, 
+         total_power, knight_exp, talent_data, arena_rank, grand_rank) = row
+        
+        players.append({
+            "viewer_id": viewer_id,
+            "user_name": user_name,
+            "join_clan_name": clan_name,
+            "team_level": team_level or 0,
+            "unit_num": unit_num or 0,
+            "total_power": total_power or 0,
+            "knight_level": _exp_to_knight_level(knight_exp),
+            "talent_done": _count_talent_quest(talent_data),
+            "arena_rank": arena_rank or 0,
+            "grand_arena_rank": grand_rank or 0
+        })
+    
+    # Default sort by total_power descending
+    players.sort(key=lambda x: x['total_power'], reverse=True)
+    
+    return {
+        "date": date,
+        "talent_total": talent_total,
+        "count": len(players),
+        "players": players
+    }

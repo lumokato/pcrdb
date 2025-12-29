@@ -127,8 +127,10 @@ class TaskQueue:
                             data_batch.append(processed)
                             success = True
                             break
+                        else:
+                            print(f"\n[DEBUG] Processed returned None for {query_id}")
                     except Exception as e:
-                        pass
+                        print(f"\n[DEBUG] Query error for {query_id}: {e}")
                     
                 if not success and retry < 3:
                      # 必须使用 await asyncio.sleep，否则会阻塞整个线程
@@ -143,9 +145,11 @@ class TaskQueue:
             
             if self.pg_inserter and data_batch:
                 try:
+                    print(f"\n[DEBUG] Inserting {len(data_batch)} records...")
                     self.pg_inserter(data_batch)
+                    print(f"[DEBUG] Insert done.")
                 except Exception as e:
-                    pass  # Silently ignore DB errors to avoid breaking progress bar
+                    print(f"\nDB Error: {e}")
 
     async def _run_async(self):
         """异步主函数"""
