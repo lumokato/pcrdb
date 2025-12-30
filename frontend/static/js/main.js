@@ -1,5 +1,5 @@
 /**
- * PCR 数据工具箱 - 前端 Vue 应用
+ * PCR 渠道服工具箱 - 前端 Vue 应用
  * 入口文件 - 组合各功能模块
  */
 import { formatDate, formatTime, formatDateTime } from './modules/utils.js';
