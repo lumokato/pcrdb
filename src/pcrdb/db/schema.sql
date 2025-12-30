@@ -106,7 +106,6 @@ CREATE TABLE arena_deck_snapshots (
     viewer_id BIGINT NOT NULL,
     collected_at TIMESTAMPTZ NOT NULL,
     
-    user_name TEXT,
     team_level SMALLINT,
     arena_group SMALLINT,
     arena_rank SMALLINT,
