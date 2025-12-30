@@ -16,6 +16,9 @@ from api.endpoints import PCRApi, create_client
 from db.connection import get_accounts_by_group, insert_snapshots_batch
 from psycopg2.extras import Json
 
+# 用于统计实际获取的记录数
+_fetch_counter = {'count': 0}
+
 
 async def query_and_save_deck(client: PCRApi, group: int, pages: int = 2):
     """查询单个分组的排名并保存"""
@@ -45,6 +48,7 @@ async def query_and_save_deck(client: PCRApi, group: int, pages: int = 2):
 
 def insert_deck_batch(user_list: List[Dict], group: int):
     """批量插入防守阵容数据"""
+    global _fetch_counter
     records = []
     now = datetime.now()
     
@@ -67,6 +71,7 @@ def insert_deck_batch(user_list: List[Dict], group: int):
     
     if records:
         insert_snapshots_batch('arena_deck_snapshots', records, collected_at=now)
+        _fetch_counter['count'] += len(records)
 
 
 async def run_async():
@@ -102,23 +107,47 @@ async def run_async():
 
 def run():
     """运行 JJC 防守阵容采集任务"""
+    from db.task_logger import TaskLogger
+    global _fetch_counter
+    
     print("=" * 60)
     print("JJC 防守阵容采集任务 (PostgreSQL)")
     print("=" * 60)
     
+    # 重置计数器
+    _fetch_counter = {'count': 0}
+    
+    # 获取分场数以计算预期获取数
+    accounts_map = get_accounts_by_group('arena')
+    num_groups = len(accounts_map)
+    pages_per_group = 2  # query_and_save_deck 默认 pages=2
+    records_per_page = 50  # 每页约50条
+    records_expected = num_groups * pages_per_group * records_per_page
+    
+    task_logger = TaskLogger('arena_deck_sync')
+    task_logger.start(
+        records_expected=records_expected,
+        details={'groups': list(accounts_map.keys()), 'pages_per_group': pages_per_group}
+    )
+    
     if os.name == 'nt':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     
-    start = time.time()
-    loop = asyncio.new_event_loop()
     try:
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(run_async())
-    finally:
-        loop.close()
-    
-    elapsed = time.time() - start
-    print(f"任务完成，耗时 {elapsed:.2f} 秒")
+        start = time.time()
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(run_async())
+        finally:
+            loop.close()
+        
+        elapsed = time.time() - start
+        print(f"任务完成，耗时 {elapsed:.2f} 秒")
+        task_logger.finish_success(records_fetched=_fetch_counter['count'])
+    except Exception as e:
+        task_logger.finish_failed(str(e), records_fetched=_fetch_counter['count'])
+        raise
 
 
 if __name__ == '__main__':

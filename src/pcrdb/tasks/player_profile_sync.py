@@ -213,6 +213,8 @@ def run(mode: str = 'top_clans', rank_limit: int = 30):
         mode: 'top_clans' 每日模式（前N公会）, 'active_all' 月度模式（所有活跃玩家）
         rank_limit: 公会排名限制
     """
+    from db.task_logger import TaskLogger
+    
     print("=" * 60)
     print("玩家档案同步任务 (PostgreSQL)")
     print("=" * 60)
@@ -222,29 +224,48 @@ def run(mode: str = 'top_clans', rank_limit: int = 30):
     print(f"运行模式: {mode}")
     
     viewer_ids, member_info = get_target_players(mode, rank_limit)
+    records_expected = len(viewer_ids)
     
     if mode == 'top_clans':
-        print(f"待查询成员: {len(viewer_ids)} 人 (前 {rank_limit} 公会)")
+        print(f"待查询成员: {records_expected} 人 (前 {rank_limit} 公会)")
     else:
-        print(f"待查询成员: {len(viewer_ids)} 人 (所有活跃高战力)")
+        print(f"待查询成员: {records_expected} 人 (所有活跃高战力)")
+    
+    # 用于累计实际获取的记录数
+    fetch_counter = {'count': 0}
+    
+    # 根据mode确定task_name
+    task_name = 'player_profile_sync_monthly' if mode == 'active_all' else 'player_profile_sync'
+    task_logger = TaskLogger(task_name)
+    task_logger.start(
+        records_expected=records_expected,
+        details={'mode': mode, 'rank_limit': rank_limit}
+    )
     
     if not viewer_ids:
         print("没有待查询的成员")
+        task_logger.finish_success(records_fetched=0)
         return
     
-    # 使用闭包传递 member_info
-    def inserter(batch):
-        insert_profile_batch(batch, member_info)
-    
-    queue = TaskQueue(
-        query_list=viewer_ids,
-        data_processor=process_profile,
-        pg_inserter=inserter,
-        sync_num=config['sync_num'],
-        batch_size=config['batch_size']
-    )
-    
-    queue.run()
+    try:
+        # 使用闭包传递 member_info 和计数
+        def inserter_with_count(batch):
+            fetch_counter['count'] += len(batch)
+            insert_profile_batch(batch, member_info)
+        
+        queue = TaskQueue(
+            query_list=viewer_ids,
+            data_processor=process_profile,
+            pg_inserter=inserter_with_count,
+            sync_num=config['sync_num'],
+            batch_size=config['batch_size']
+        )
+        
+        queue.run()
+        task_logger.finish_success(records_fetched=fetch_counter['count'])
+    except Exception as e:
+        task_logger.finish_failed(str(e), records_fetched=fetch_counter['count'])
+        raise
 
 
 if __name__ == '__main__':

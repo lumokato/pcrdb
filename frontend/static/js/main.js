@@ -23,7 +23,8 @@ createApp({
         const {
             auth, admin, authFetch,
             initAuth, login, register, logout, checkStatus,
-            adminGetUsers, adminApproveUser, loadApiStats, showApiDetails, showUserInfo
+            adminGetUsers, adminApproveUser, loadApiStats, showApiDetails, showUserInfo,
+            loadTaskLogs, loadAdminUsers
         } = useAuth(currentTab);
 
         const {
@@ -137,6 +138,8 @@ createApp({
             loadApiStats,
             showApiDetails,
             showUserInfo,
+            loadTaskLogs,
+            loadAdminUsers,
             formatDateTime,
             getApiCallCount,
             getLastCallTime

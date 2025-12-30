@@ -1,0 +1,47 @@
+# 任务调度配置
+# 使用 cron 表达式格式: "分 时 日 月 星期"
+# 或使用简化表达式: "daily", "weekly", "monthly"
+
+tasks:
+  clan_sync:
+    # 每月倒数第4天凌晨4点执行（L-3 表示倒数第4天）
+    # 用于在月末公会战结算前进行数据同步
+    schedule: "0 4 L-3 * *"
+    enabled: true
+    description: "公会信息同步（每月倒数第4天执行）"
+  
+  player_profile_sync:
+    # 每天凌晨4点30分执行（每日模式：前30公会和战力前500名）
+    schedule: "30 4 * * *"
+    enabled: true
+    mode: "top_clans"
+    params:
+      rank_limit: 30
+    description: "玩家档案同步（每日：前30公会成员）"
+  
+  player_profile_sync_monthly:
+    # 每月1日凌晨4点执行（月度模式：所有活跃玩家）
+    schedule: "0 4 1 * *"
+    enabled: true
+    mode: "active_all"
+    description: "玩家档案同步（月度：所有活跃高战力玩家）"
+  
+  grand_sync:
+    # 每天下午15点执行
+    schedule: "0 15 * * *"
+    enabled: true
+    description: "公主竞技场排名同步"
+  
+  arena_deck_sync:
+    # 每隔10天的14点50分执行（每月1日、11日、21日）
+    schedule: "50 14 1,11,21 * *"
+    enabled: true
+    description: "竞技场配队同步（每10天执行）"
+
+# 调度器设置
+scheduler:
+  timezone: "Asia/Shanghai"
+  # 是否在启动时检查并运行错过的任务
+  catch_up: false
+  # 日志级别
+  log_level: "INFO"

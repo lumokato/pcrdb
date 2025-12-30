@@ -9,7 +9,6 @@ CREATE TABLE clan_snapshots (
     id SERIAL PRIMARY KEY,
     clan_id INTEGER NOT NULL,
     collected_at TIMESTAMPTZ NOT NULL,
-    
     clan_name TEXT,
     leader_viewer_id BIGINT,
     leader_name TEXT,
@@ -21,11 +20,10 @@ CREATE TABLE clan_snapshots (
     grade_rank INTEGER,
     description TEXT,
     exist BOOLEAN DEFAULT TRUE,
-    
     UNIQUE (clan_id, collected_at)
 );
 
-CREATE INDEX idx_clan_latest ON clan_snapshots(clan_id, collected_at DESC);
+CREATE INDEX idx_clan_latest ON clan_snapshots (clan_id, collected_at DESC);
 
 -----------------------------------------------------------
 -- Table 2: player_clan_snapshots
@@ -34,7 +32,6 @@ CREATE TABLE player_clan_snapshots (
     id SERIAL PRIMARY KEY,
     viewer_id BIGINT NOT NULL,
     collected_at TIMESTAMPTZ NOT NULL,
-    
     name TEXT,
     level SMALLINT,
     role SMALLINT,
@@ -42,12 +39,12 @@ CREATE TABLE player_clan_snapshots (
     join_clan_id INTEGER,
     join_clan_name TEXT,
     last_login_time TIMESTAMPTZ,
-    
     UNIQUE (viewer_id, collected_at)
 );
 
-CREATE INDEX idx_pclan_viewer ON player_clan_snapshots(viewer_id, collected_at DESC);
-CREATE INDEX idx_pclan_clan ON player_clan_snapshots(join_clan_id);
+CREATE INDEX idx_pclan_viewer ON player_clan_snapshots (viewer_id, collected_at DESC);
+
+CREATE INDEX idx_pclan_clan ON player_clan_snapshots (join_clan_id);
 
 -----------------------------------------------------------
 -- Table 3: player_profile_snapshots
@@ -56,7 +53,6 @@ CREATE TABLE player_profile_snapshots (
     id SERIAL PRIMARY KEY,
     viewer_id BIGINT NOT NULL,
     collected_at TIMESTAMPTZ NOT NULL,
-    
     user_name TEXT,
     team_level SMALLINT,
     unit_num SMALLINT,
@@ -72,11 +68,10 @@ CREATE TABLE player_profile_snapshots (
     talent_quest_clear JSONB,
     user_comment TEXT,
     last_login_time TIMESTAMPTZ,
-    
     UNIQUE (viewer_id, collected_at)
 );
 
-CREATE INDEX idx_pprofile_viewer ON player_profile_snapshots(viewer_id, collected_at DESC);
+CREATE INDEX idx_pprofile_viewer ON player_profile_snapshots (viewer_id, collected_at DESC);
 
 -----------------------------------------------------------
 -- Table 4: grand_arena_snapshots
@@ -85,18 +80,16 @@ CREATE TABLE grand_arena_snapshots (
     id SERIAL PRIMARY KEY,
     viewer_id BIGINT NOT NULL,
     collected_at TIMESTAMPTZ NOT NULL,
-    
     user_name TEXT,
     team_level SMALLINT,
     grand_arena_rank SMALLINT,
     grand_arena_group SMALLINT,
     winning_number SMALLINT,
     favorite_unit INTEGER,
-    
     UNIQUE (viewer_id, collected_at)
 );
 
-CREATE INDEX idx_grand_viewer ON grand_arena_snapshots(viewer_id, collected_at DESC);
+CREATE INDEX idx_grand_viewer ON grand_arena_snapshots (viewer_id, collected_at DESC);
 
 -----------------------------------------------------------
 -- Table 5: arena_deck_snapshots
@@ -105,16 +98,14 @@ CREATE TABLE arena_deck_snapshots (
     id SERIAL PRIMARY KEY,
     viewer_id BIGINT NOT NULL,
     collected_at TIMESTAMPTZ NOT NULL,
-    
     team_level SMALLINT,
     arena_group SMALLINT,
     arena_rank SMALLINT,
     arena_deck JSONB,
-    
     UNIQUE (viewer_id, collected_at)
 );
 
-CREATE INDEX idx_deck_viewer ON arena_deck_snapshots(viewer_id, collected_at DESC);
+CREATE INDEX idx_deck_viewer ON arena_deck_snapshots (viewer_id, collected_at DESC);
 
 -----------------------------------------------------------
 -- Table 6: accounts (data collection accounts)
@@ -123,17 +114,18 @@ CREATE TABLE accounts (
     id SERIAL PRIMARY KEY,
     uid TEXT NOT NULL UNIQUE,             -- login UID (string format)
     access_key TEXT NOT NULL,             -- shared login key
-    
-    -- account info (obtained after login)
-    viewer_id BIGINT,                     -- player ID
-    name TEXT,                            -- player name
-    
-    -- arena info (obtained from ranking API)
-    arena_group SMALLINT DEFAULT 0,       -- JJC group (0=not queried)
-    grand_arena_group SMALLINT DEFAULT 0, -- PJJC group (0=not enabled or not queried)
-    
-    -- status
-    is_active BOOLEAN DEFAULT TRUE,
+
+-- account info (obtained after login)
+viewer_id BIGINT, -- player ID
+name TEXT, -- player name
+
+-- arena info (obtained from ranking API)
+arena_group SMALLINT DEFAULT 0, -- JJC group (0=not queried)
+grand_arena_group SMALLINT DEFAULT 0, -- PJJC group (0=not enabled or not queried)
+
+-- status
+
+is_active BOOLEAN DEFAULT TRUE,
     note TEXT,
     
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -151,18 +143,43 @@ CREATE TABLE auth.users (
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     qq_number TEXT NOT NULL UNIQUE,
-    role TEXT NOT NULL DEFAULT 'user',        -- 'admin' 或 'user'
-    status TEXT NOT NULL DEFAULT 'pending',   -- 'pending' 或 'active'
+    role TEXT NOT NULL DEFAULT 'user', -- 'admin' 或 'user'
+    status TEXT NOT NULL DEFAULT 'pending', -- 'pending' 或 'active'
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Table: auth.api_logs - API 调用日志
 CREATE TABLE auth.api_logs (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES auth.users(id),
+    user_id INTEGER REFERENCES auth.users (id),
     endpoint TEXT NOT NULL,
-    query_params JSONB,                       -- 查询参数（如 {"clan_id": 123}）
+    query_params JSONB, -- 查询参数（如 {"clan_id": 123}）
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_api_logs_user ON auth.api_logs(user_id, created_at DESC);
+CREATE INDEX idx_api_logs_user ON auth.api_logs (user_id, created_at DESC);
+
+-----------------------------------------------------------
+-- Table 7: task_logs - 定时任务执行日志
+-----------------------------------------------------------
+CREATE TABLE task_logs (
+    id SERIAL PRIMARY KEY,
+    task_name TEXT NOT NULL,              -- 任务名称 (如 'clan_sync')
+    started_at TIMESTAMPTZ NOT NULL,      -- 开始时间
+    finished_at TIMESTAMPTZ NOT NULL,     -- 结束时间
+    duration_seconds NUMERIC(10,2),       -- 耗时（秒）
+    status TEXT NOT NULL,                 -- 'success' 或 'failed'
+
+-- 执行统计（三个值用于对比判断问题）
+records_expected INTEGER DEFAULT 0, -- 预计获取数（基于历史或计算）
+records_fetched INTEGER DEFAULT 0, -- API实际返回的有效记录数
+records_saved INTEGER DEFAULT 0, -- 实际入库数（数据库增量）
+
+-- 错误信息
+error_message TEXT, -- 错误信息（失败时）
+
+-- 可选详情
+details JSONB                         -- 额外详情 {"mode": "top_clans", ...}
+);
+
+CREATE INDEX idx_task_logs_name ON task_logs (task_name, started_at DESC);

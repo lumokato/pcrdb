@@ -322,11 +322,22 @@ def _exp_to_knight_level(exp: int) -> str:
 
 
 def _count_talent_quest(talent_data) -> int:
-    """Count completed talent quest stages from JSON data."""
+    """
+    Count completed talent quest stages from JSON data.
+    
+    Supports multiple data formats:
+    - List format: [49, 39, 49, 39, 50] - 每个元素代表一个大区的完成数量
+    - Dict format: {stage_id: difficulty_flags, ...}
+    """
     if not talent_data:
         return 0
+    
+    # 列表格式：每个元素是一个大区的完成数量
+    if isinstance(talent_data, list):
+        return sum(v for v in talent_data if isinstance(v, (int, float)))
+    
+    # 字典格式：{stage_id: difficulty_flags, ...}
     if isinstance(talent_data, dict):
-        # Format: {stage_id: difficulty_flags, ...}
         count = 0
         for stage_id, flags in talent_data.items():
             if isinstance(flags, int):
@@ -335,6 +346,7 @@ def _count_talent_quest(talent_data) -> int:
             elif isinstance(flags, list):
                 count += len(flags)
         return count
+    
     return 0
 
 
@@ -488,9 +500,16 @@ def get_top_clan_profiles(date: str = None, clan_id: int = None) -> Dict:
     # Default sort by total_power descending
     players.sort(key=lambda x: x['total_power'], reverse=True)
     
+    # 获取公会名（如果指定了 clan_id）
+    clan_name_result = None
+    if clan_id and players:
+        clan_name_result = players[0].get('join_clan_name')
+    
     return {
         "date": date,
         "talent_total": talent_total,
         "count": len(players),
+        "clan_id": clan_id,  # 可能为 None
+        "clan_name": clan_name_result,  # 可能为 None
         "players": players
     }

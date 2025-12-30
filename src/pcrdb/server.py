@@ -198,6 +198,17 @@ async def admin_api_details(
     }
 
 
+@app.get("/api/admin/task_logs")
+async def admin_task_logs(
+    limit: int = Query(50, description="返回数量"),
+    task_name: Optional[str] = Query(None, description="筛选任务名"),
+    user: dict = Depends(get_current_admin_user)
+):
+    """获取定时任务执行日志"""
+    from src.pcrdb.db.task_logger import get_recent_logs
+    logs = get_recent_logs(limit=limit, task_name=task_name)
+    return {"logs": logs}
+
 @app.get("/api/clan/history")
 async def api_clan_history(
     clan_id: Optional[int] = Query(None, description="公会 ID"),
@@ -313,21 +324,16 @@ async def api_player_periods(
     return get_available_periods()
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "server:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True
-    )
+
 
 
 # === 会战 API 代理（解决跨域问题）===
 import httpx
 from fastapi import Request, Response
 
-CLAN_BATTLE_API = "https://clan.120224.xyz"
+import os
+
+CLAN_BATTLE_API = os.environ["CLAN_BATTLE_API_URL"]
 
 
 @app.get("/proxy/current/getalltime/qd")

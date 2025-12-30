@@ -189,6 +189,8 @@ def insert_clan_batch(data_batch: List[Dict]):
 
 def run(new_clan_add: int = 100):
     """运行公会信息同步任务"""
+    from db.task_logger import TaskLogger
+    
     print("=" * 60)
     print(f"公会信息同步任务 (PostgreSQL)")
     print("=" * 60)
@@ -196,17 +198,42 @@ def run(new_clan_add: int = 100):
     config = get_config()
     
     query_list = build_query_list(new_clan_add)
-    print(f"待查询公会: {len(query_list)} 个")
+    query_count = len(query_list)
+    print(f"待查询公会: {query_count} 个")
     
-    queue = TaskQueue(
-        query_list=query_list,
-        data_processor=process_clan_data,
-        pg_inserter=insert_clan_batch,
-        sync_num=config['sync_num'],
-        batch_size=config['batch_size']
+    # 预估获取数：使用上次入库数或查询数 × 30（估计每公会30成员）
+    # 简化：用查询数 × 30 作为预估
+    records_expected = query_count * 31  # 1条公会 + 约30条成员
+    
+    # 用于累计实际获取的记录数
+    fetch_counter = {'count': 0}
+    
+    def insert_with_count(data_batch):
+        """带计数的插入函数"""
+        fetch_counter['count'] += len(data_batch)
+        insert_clan_batch(data_batch)
+    
+    # 初始化日志记录
+    task_logger = TaskLogger('clan_sync')
+    task_logger.start(
+        records_expected=records_expected, 
+        details={'new_clan_add': new_clan_add, 'query_count': query_count}
     )
     
-    queue.run()
+    try:
+        queue = TaskQueue(
+            query_list=query_list,
+            data_processor=process_clan_data,
+            pg_inserter=insert_with_count,
+            sync_num=config['sync_num'],
+            batch_size=config['batch_size']
+        )
+        
+        queue.run()
+        task_logger.finish_success(records_fetched=fetch_counter['count'])
+    except Exception as e:
+        task_logger.finish_failed(str(e), records_fetched=fetch_counter['count'])
+        raise
 
 
 if __name__ == '__main__':

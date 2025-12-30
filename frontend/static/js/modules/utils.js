@@ -4,8 +4,9 @@
  */
 
 // API 配置
-export const LOCAL_API = 'http://localhost:8000';
-export const CLAN_BATTLE_API = 'http://localhost:8000/proxy';
+// API 配置
+export const LOCAL_API = '';
+export const CLAN_BATTLE_API = '/proxy';
 
 /**
  * 格式化日期

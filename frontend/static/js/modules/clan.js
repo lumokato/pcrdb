@@ -23,7 +23,7 @@ export function useClan(authFetch, logout) {
         // Profiles mode state
         profilesResult: null,
         sortColumn: 'total_power',
-        sortAsc: false,
+        sortAsc: false,  // 默认降序排列
         topClans: [],
         selectedClanId: '',
         searchDate: '',
@@ -193,8 +193,8 @@ export function useClan(authFetch, logout) {
                 clan.error = data.error;
             } else {
                 clan.profilesResult = data;
-                // Apply default sort
-                sortProfiles('total_power');
+                // Apply default sort (force descending, don't toggle)
+                sortProfiles('total_power', true);
             }
         } catch (e) {
             clan.error = '查询失败，请确保后端服务已启动';
@@ -204,11 +204,16 @@ export function useClan(authFetch, logout) {
     };
 
     // 排序前排成员表格
-    const sortProfiles = (column) => {
+    // forceDesc: 如果为 true，强制降序排列，不切换方向
+    const sortProfiles = (column, forceDesc = false) => {
         if (!clan.profilesResult || !clan.profilesResult.players) return;
 
-        // Toggle direction if same column
-        if (clan.sortColumn === column) {
+        if (forceDesc) {
+            // 强制降序，不切换
+            clan.sortColumn = column;
+            clan.sortAsc = false;
+        } else if (clan.sortColumn === column) {
+            // Toggle direction if same column
             clan.sortAsc = !clan.sortAsc;
         } else {
             clan.sortColumn = column;

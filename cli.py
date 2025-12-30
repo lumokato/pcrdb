@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 
 def cmd_task(args):
-    """运行采集任务"""
+    """运行采集任务（日志记录已集成在各task模块内部）"""
     from pcrdb.tasks import clan_sync, grand_sync, arena_deck_sync, player_profile_sync
     
     task_map = {
@@ -37,8 +37,12 @@ def cmd_task(args):
                 kwargs[k] = int(v) if v.isdigit() else v
     
     print(f"运行任务: {args.task_name}")
-    task_map[args.task_name](**kwargs)
-    return 0
+    try:
+        task_map[args.task_name](**kwargs)
+        return 0
+    except Exception as e:
+        print(f"任务失败: {e}")
+        return 1
 
 
 def main():

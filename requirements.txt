@@ -11,3 +11,5 @@ python-dotenv
 fastapi
 uvicorn
 python-jose
+schedule
+httpx

@@ -31,6 +31,7 @@ export function useAuth(currentTab) {
     const admin = reactive({
         loading: false,
         users: [],
+        mode: 'users',  // 'users' | 'task_logs'
         // API 统计
         statsLoading: false,
         apiStats: [],
@@ -39,7 +40,10 @@ export function useAuth(currentTab) {
         apiDetails: [],
         // 用户信息弹窗
         showUserInfo: false,
-        userInfoData: {}
+        userInfoData: {},
+        // 任务日志
+        taskLogsLoading: false,
+        taskLogs: []
     });
 
     // 带认证的 fetch
@@ -249,6 +253,29 @@ export function useAuth(currentTab) {
         admin.showUserInfo = true;
     };
 
+    // 管理员：加载任务日志
+    const loadTaskLogs = async () => {
+        if (auth.role !== 'admin') return;
+        admin.taskLogsLoading = true;
+        try {
+            const res = await authFetch(`${LOCAL_API}/api/admin/task_logs?limit=50`);
+            const data = await res.json();
+            if (data.logs) {
+                admin.taskLogs = data.logs;
+            }
+        } catch (e) {
+            console.error('获取任务日志失败', e);
+        } finally {
+            admin.taskLogsLoading = false;
+        }
+    };
+
+    // 管理员：加载用户列表（别名）
+    const loadAdminUsers = () => {
+        adminGetUsers();
+        loadApiStats();
+    };
+
     // 监听 Tab 切换加载管理员数据
     watch(currentTab, (newTab) => {
         if (newTab === 'admin' && auth.role === 'admin') {
@@ -270,6 +297,8 @@ export function useAuth(currentTab) {
         adminApproveUser,
         loadApiStats,
         showApiDetails,
-        showUserInfo
+        showUserInfo,
+        loadTaskLogs,
+        loadAdminUsers
     };
 }

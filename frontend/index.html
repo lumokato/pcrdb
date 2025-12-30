@@ -223,6 +223,20 @@
             <!-- 管理面板 Tab -->
             <div v-show="currentTab === 'admin' && auth.role === 'admin'">
                 <div class="card">
+                    <div class="tab-container">
+                        <button class="tab-btn" :class="{ active: admin.mode === 'users' }"
+                            @click="admin.mode = 'users'; loadAdminUsers()">
+                            用户管理
+                        </button>
+                        <button class="tab-btn" :class="{ active: admin.mode === 'task_logs' }"
+                            @click="admin.mode = 'task_logs'; loadTaskLogs()">
+                            任务日志
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 用户管理 -->
+                <div class="card" v-if="admin.mode === 'users'">
                     <div class="card-header">
                         用户管理 ({{ admin.users.length }})
                         <button class="btn btn-secondary" style="float: right; padding: 0.3rem 0.8rem;"
@@ -280,6 +294,58 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- 任务日志 -->
+                <div class="card" v-if="admin.mode === 'task_logs'">
+                    <div class="card-header">
+                        任务执行日志
+                        <button class="btn btn-secondary" style="float: right; padding: 0.3rem 0.8rem;"
+                            @click="loadTaskLogs" :disabled="admin.taskLogsLoading">
+                            刷新
+                        </button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 140px;">任务名</th>
+                                    <th style="width: 60px; text-align: center;">状态</th>
+                                    <th style="width: 140px;">开始时间</th>
+                                    <th style="width: 70px; text-align: right;">耗时(秒)</th>
+                                    <th style="width: 80px; text-align: right;">预计</th>
+                                    <th style="width: 80px; text-align: right;">获取</th>
+                                    <th style="width: 80px; text-align: right;">入库</th>
+                                    <th>备注</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="log in admin.taskLogs" :key="log.id">
+                                    <td>{{ log.task_name }}</td>
+                                    <td style="text-align: center;">
+                                        <span :style="{ 
+                                            color: log.status === 'success' ? 'var(--success-color, green)' : 'var(--error-color, red)',
+                                            fontWeight: 'bold'
+                                        }">
+                                            {{ log.status === 'success' ? '✓' : '✗' }}
+                                        </span>
+                                    </td>
+                                    <td>{{ formatDateTime(log.started_at) }}</td>
+                                    <td style="text-align: right;">{{ log.duration_seconds?.toFixed(1) }}</td>
+                                    <td style="text-align: right;">{{ log.records_expected }}</td>
+                                    <td style="text-align: right;">{{ log.records_fetched }}</td>
+                                    <td style="text-align: right;">{{ log.records_saved }}</td>
+                                    <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis;">
+                                        {{ log.error_message || (log.details ? JSON.stringify(log.details) : '-') }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-if="admin.taskLogs.length === 0"
+                        style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                        暂无任务日志
                     </div>
                 </div>
 
@@ -391,6 +457,29 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 日期历史查询表单 -->
+                    <div v-if="clan.mode === 'profiles'">
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 1;">
+                                <select class="form-control" v-model="clan.searchDate" @change="loadTopClans()">
+                                    <option v-for="d in clan.dateOptions" :value="d">{{ d }}</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 2;">
+                                <select class="form-control" v-model="clan.selectedClanId">
+                                    <option value="">全部公会</option>
+                                    <option v-for="c in clan.topClans" :value="c.clan_id">{{ c.ranking }}. {{
+                                        c.clan_name }} ({{ c.clan_id }})</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <button class="btn" @click="searchClanProfiles" :disabled="clan.loading">
+                                    {{ clan.loading ? '查询中' : '查询' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 公会历史结果 -->
@@ -447,74 +536,55 @@
                     </table>
                 </div>
 
-                <!-- 前排成员查询表单 -->
-                <div class="card" v-if="clan.mode === 'profiles'">
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 1;">
-                            <select class="form-control" v-model="clan.searchDate" @change="loadTopClans()">
-                                <option v-for="d in clan.dateOptions" :value="d">{{ d }}</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="flex: 2;">
-                            <select class="form-control" v-model="clan.selectedClanId">
-                                <option value="">全部公会</option>
-                                <option v-for="c in clan.topClans" :value="c.clan_id">{{ c.ranking }}. {{ c.clan_name }}
-                                </option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <button class="btn" @click="searchClanProfiles" :disabled="clan.loading">
-                                {{ clan.loading ? '查询中' : '查询' }}
-                            </button>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- 前排成员结果 -->
                 <div class="card" v-if="clan.mode === 'profiles' && clan.profilesResult">
-                    <div class="card-header">前排公会成员 共{{ clan.profilesResult.count }}人</div>
+                    <div class="card-header">{{ clan.profilesResult.clan_name ? clan.profilesResult.clan_name + '(' +
+                        clan.profilesResult.clan_id + ')' : clan.profilesResult.date }} 共{{ clan.profilesResult.count
+                        }}人</div>
                     <table>
                         <thead>
                             <tr>
+                                <th style="width: 7%;">#</th>
                                 <th @click="sortProfiles('join_clan_name')" style="cursor: pointer;">
                                     公会 {{ clan.sortColumn === 'join_clan_name' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
                                 <th @click="sortProfiles('user_name')" style="cursor: pointer;">
                                     玩家名 {{ clan.sortColumn === 'user_name' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
-                                <th @click="sortProfiles('team_level')" style="cursor: pointer;">
+                                <th @click="sortProfiles('team_level')" style="cursor: pointer; width: 6%;">
                                     等级 {{ clan.sortColumn === 'team_level' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
-                                <th @click="sortProfiles('unit_num')" style="cursor: pointer;">
+                                <th @click="sortProfiles('unit_num')" style="cursor: pointer; width: 6%;">
                                     角色 {{ clan.sortColumn === 'unit_num' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
-                                <th @click="sortProfiles('total_power')" style="cursor: pointer;">
+                                <th @click="sortProfiles('total_power')" style="cursor: pointer; width: 10%;">
                                     战力 {{ clan.sortColumn === 'total_power' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
-                                <th @click="sortProfiles('knight_level')" style="cursor: pointer;">
+                                <th @click="sortProfiles('knight_level')" style="cursor: pointer; width: 10%;">
                                     骑士等级 {{ clan.sortColumn === 'knight_level' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
-                                <th @click="sortProfiles('talent_done')" style="cursor: pointer;">
-                                    深域 {{ clan.sortColumn === 'talent_done' ? (clan.sortAsc ? '↑' : '↓') : '' }}
+                                <th @click="sortProfiles('talent_done')" style="cursor: pointer; width: 10%;">
+                                    深域完成 {{ clan.sortColumn === 'talent_done' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
-                                <th @click="sortProfiles('arena_rank')" style="cursor: pointer;">
+                                <th @click="sortProfiles('arena_rank')" style="cursor: pointer; width: 8%;">
                                     JJC {{ clan.sortColumn === 'arena_rank' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
-                                <th @click="sortProfiles('grand_arena_rank')" style="cursor: pointer;">
+                                <th @click="sortProfiles('grand_arena_rank')" style="cursor: pointer; width: 8%;">
                                     PJJC {{ clan.sortColumn === 'grand_arena_rank' ? (clan.sortAsc ? '↑' : '↓') : '' }}
                                 </th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="p in clan.profilesResult.players" :key="p.viewer_id">
+                            <tr v-for="(p, idx) in clan.profilesResult.players" :key="p.viewer_id">
+                                <td>{{ idx + 1 }}</td>
                                 <td>{{ p.join_clan_name }}</td>
                                 <td>{{ p.user_name }}</td>
                                 <td>{{ p.team_level }}</td>
                                 <td>{{ p.unit_num }}</td>
                                 <td>{{ p.total_power }}</td>
                                 <td>{{ p.knight_level }}</td>
-                                <td>{{ clan.profilesResult.talent_total - p.talent_done }}/{{
-                                    clan.profilesResult.talent_total }}</td>
+                                <td>{{ p.talent_done }}/{{ clan.profilesResult.talent_total }}</td>
                                 <td>{{ p.arena_rank }}</td>
                                 <td>{{ p.grand_arena_rank }}</td>
                             </tr>
