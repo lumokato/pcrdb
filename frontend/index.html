@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCR 数据工具箱</title>
+    <title>PCR 渠道服工具箱</title>
     <link rel="shortcut icon" type="image/x-icon" href="/static/128431.ico" />
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
@@ -45,7 +45,7 @@
                     <!-- 登录状态 -->
                     <span v-if="auth.isLoggedIn" class="navbar-item" style="color: var(--primary-color);">
                         {{ auth.username }}
-                        <a href="#" @click.prevent="logout" style="margin-left: 0.5rem; font-size: 0.9rem;">登出</a>
+                        <span @click="logout" style="margin-left: 0.5rem; font-size: 0.9rem; cursor: pointer;">登出</span>
                     </span>
                     <span v-else class="navbar-item" :class="{ active: currentTab === 'login' }"
                         @click="currentTab = 'login'" style="cursor: pointer;">
@@ -58,6 +58,15 @@
         <div class="container fade-in">
             <!-- 会战查询 Tab -->
             <div v-show="currentTab === 'clan_battle'">
+                <div class="notice-banner">
+                    <span class="notice-badge">🚧 功能内测中</span>
+                    <span>✨ 欢迎测试，您的反馈是我们前进的动力！</span>
+                    <span class="notice-separator">|</span>
+                    <span>关注项目：<a href="https://github.com/lumokato/pcrdb" target="_blank">GitHub</a></span>
+                    <span class="notice-separator">|</span>
+                    <span>账号审核：请在 <a href="https://github.com/lumokato/pcrdb/issues" target="_blank">GitHub Issue</a>
+                        留言</span>
+                </div>
                 <div class="card">
                     <div class="tab-container">
                         <button class="tab-btn" :class="{ active: clanBattle.mode === 'current' }"

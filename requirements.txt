@@ -13,3 +13,4 @@ uvicorn
 python-jose
 schedule
 httpx
+bcrypt

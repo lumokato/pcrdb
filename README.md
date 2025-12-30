@@ -1,4 +1,4 @@
-# pcrdb - 公主连结渠道服数据采集系统
+# pcrdb - 公主连结数据采集系统
 
 从公主连结游戏 API 采集公会、成员、竞技场等数据的 ETL 工具。
 
@@ -8,31 +8,32 @@
 
 最简单的方式是使用 Docker Compose 一键启动数据库和应用。
 
-1.  **准备配置**:
-    复制 `.env.example` 为 `.env` 并填入数据库密码：
-    ```bash
-    cp .env.example .env
-    ```
+1. **准备配置**:
+   复制 `.env.example` 为 `.env` 并填入数据库密码：
 
-2.  **启动服务**:
-    ```bash
-    docker-compose up -d
-    ```
+   ```bash
+   cp .env.example .env
+   ```
+2. **启动服务**:
+
+   ```bash
+   docker-compose up -d
+   ```
 
 ### 方式二：本地运行
 
-1.  **安装依赖**:
-    ```bash
-    pip install -r requirements.txt
-    ```
+1. **安装依赖**:
 
-2.  **配置数据库**:
-    确保本地安装了 PostgreSQL，并在 `.env` 中配置连接信息。
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **配置数据库**:
+   确保本地安装了 PostgreSQL，并在 `.env` 中配置连接信息。
+3. **运行任务**:
 
-3.  **运行任务**:
-    ```bash
-    python cli.py task clan_sync
-    ```
+   ```bash
+   python cli.py task clan_sync
+   ```
 
 ## 目录结构
 
@@ -57,14 +58,12 @@ pcrdb/
 
 本项目依赖 `config/` 目录下的配置文件运行。
 
-1.  **账号配置** (`config/accounts.json`):
-    包含游戏账号的认证信息。**请勿提交此文件到版本控制。**
-
-2.  **调度配置** (`config/schedule.yaml`):
-    定义定时任务的执行规则。可参考 `docs/schedule.yaml` (如果存在) 或创建新文件。
-
-3.  **环境变量** (`.env`):
-    定义数据库连接信息和访问密钥。参考 `.env.example`。
+1. **账号配置** (`config/accounts.json`):
+   包含游戏账号的认证信息。**请勿提交此文件到版本控制。**
+2. **调度配置** (`config/schedule.yaml`):
+   定义定时任务的执行规则。可参考 `docs/schedule.yaml` (如果存在) 或创建新文件。
+3. **环境变量** (`.env`):
+   定义数据库连接信息和访问密钥。参考 `.env.example`。
 
 ## CLI 命令
 
@@ -80,12 +79,12 @@ python cli.py task <task_name> [args]
 
 ### 可用任务
 
-| 任务名称 | 描述 | 参数示例 |
-| :--- | :--- | :--- |
-| `clan_sync` | 同步公会及成员信息 | (无) |
-| `grand_sync` | 同步公主竞技场(PJJC)排名 | (无) |
-| `arena_deck_sync` | 同步竞技场防守阵容 | (无) |
-| `player_profile_sync` | 同步玩家详细档案 | `mode=top_clans rank_limit=30` |
+| 任务名称                | 描述                     | 参数示例                         |
+| :---------------------- | :----------------------- | :------------------------------- |
+| `clan_sync`           | 同步公会及成员信息       | (无)                             |
+| `grand_sync`          | 同步公主竞技场(PJJC)排名 | (无)                             |
+| `arena_deck_sync`     | 同步竞技场防守阵容       | (无)                             |
+| `player_profile_sync` | 同步玩家详细档案         | `mode=top_clans rank_limit=30` |
 
 ### 示例
 

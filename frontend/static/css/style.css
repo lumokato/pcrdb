@@ -310,6 +310,49 @@ tr:hover {
     margin-top: 1rem;
 }
 
+.notice-banner {
+    background: rgba(255, 243, 205, 0.95);
+    color: #856404;
+    border: 1px solid #ffeeba;
+    border-radius: var(--border-radius);
+    padding: 0.8rem;
+    margin-bottom: 1rem;
+    text-align: center;
+    font-size: 0.95rem;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    display: flex;
+    /* Use flexbox for centering and alignment */
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    /* Allow wrapping on small screens */
+}
+
+.notice-banner a {
+    color: inherit;
+    text-decoration: underline;
+    font-weight: 600;
+}
+
+.notice-badge {
+    background-color: #ff9f43;
+    /* Orange color for beta status */
+    color: #fff;
+    padding: 0.15rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    letter-spacing: 0.5px;
+}
+
+.notice-separator {
+    opacity: 0.4;
+    margin: 0 0.2rem;
+}
+
 /* 弹窗 */
 .modal-overlay {
     position: fixed;
