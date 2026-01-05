@@ -131,20 +131,10 @@ def process_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
     vid = user.get('viewer_id')
     
     # 提取天赋关卡通关信息
-    talent_quest = profile_data.get('talent_quest', {})
+    talent_quest = profile_data.get('quest_info', {}).get('talent_quest', {})
     talent_clear = [0, 0, 0, 0, 0]
-    for tq in talent_quest.get('talent_quest_list', []):
-        idx = tq.get('talent_id', 1) - 1
-        if 0 <= idx < 5:
-            talent_clear[idx] = tq.get('clear_count', 0)
-    
-    talent_json = {
-        "clear_0": talent_clear[0],
-        "clear_1": talent_clear[1],
-        "clear_2": talent_clear[2],
-        "clear_3": talent_clear[3],
-        "clear_4": talent_clear[4]
-    }
+    for idx, tq in enumerate(talent_quest):
+        talent_clear[idx] = tq.get('clear_count', 0)
     
     # 提取骑士经验
     princess_knight_exp = user.get('princess_knight_rank_total_exp', 0)
@@ -166,7 +156,7 @@ def process_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
         'favorite_unit': favorite_unit_id,
         'user_comment': user_comment,
         'princess_knight_rank_total_exp': princess_knight_exp,
-        'talent_quest_clear': talent_json
+        'talent_quest_clear': talent_clear
     }
 
 
