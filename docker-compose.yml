@@ -103,6 +103,46 @@ services:
         max-size: 10m
         max-file: "3"
 
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/usr/local/bin/pcrdb-backup"]
+    user: "70:70"
+    read_only: true
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${PCRDB_DATABASE:-pcrdb}
+      PGUSER: ${PCRDB_ADMIN_USER:?PCRDB_ADMIN_USER is required}
+      PGPASSWORD: ${PCRDB_ADMIN_PASSWORD:?PCRDB_ADMIN_PASSWORD is required}
+      PCRDB_BACKUP_INTERVAL_SECONDS: ${PCRDB_BACKUP_INTERVAL_SECONDS:-86400}
+      PCRDB_BACKUP_RETRY_SECONDS: ${PCRDB_BACKUP_RETRY_SECONDS:-900}
+      PCRDB_BACKUP_RETENTION_COUNT: ${PCRDB_BACKUP_RETENTION_COUNT:-1}
+      TZ: Asia/Shanghai
+    volumes:
+      - ./docker/postgres/backup.sh:/usr/local/bin/pcrdb-backup:ro
+      - pcrdb-backups:/backups
+    tmpfs:
+      - /tmp
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -n "$$(find /backups -maxdepth 1 -type f -name 'pcrdb-*.dump' -print -quit)"
+      interval: 1h
+      timeout: 5s
+      retries: 2
+      start_period: 30m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 volumes:
   pcrdb-data:
+    external: true
+  pcrdb-backups:
     external: true

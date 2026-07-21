@@ -7,6 +7,7 @@
 - `db`: PostgreSQL 17，复用外部卷 `pcrdb-data`，启动时应用 schema migration 和角色授权。
 - `web`: 单个 FastAPI 进程，同时提供 `/api/*` 和 `frontend/` 静态站点。
 - `worker`: APScheduler 进程，运行原 PCRDB 任务和会战状态机采集。
+- `backup`: 每 24 小时生成一次 PostgreSQL 自校验逻辑备份，写入外部卷 `pcrdb-backups`。
 
 浏览器直接访问 `/api/clan-battle/*`，不再使用 `/proxy` 或独立 ClanRank 服务。
 
@@ -68,3 +69,15 @@ Worker 每个北京时间 `00/30` 分运行一次：
 7. 状态保存在 PostgreSQL，并使用 advisory lock 防止重复 Worker。
 
 普通 PCRDB 任务继续读取 `config/schedule.yaml`，由 APScheduler 执行完整 cron 表达式；`L-N` 仍表示当月倒数第 `N+1` 天。
+
+## 数据库备份
+
+`backup` 服务启动后立即运行 `pg_dump`，并在写入正式文件前使用 `pg_restore --list` 校验。卷内默认只保留最新一份完整 dump 和对应 SHA256；Dokploy Volume Backup 再将这个已完成的文件卷上传到对象存储，不直接在线复制 PostgreSQL 数据目录。
+
+首次部署前需要创建外部卷：
+
+```bash
+docker volume create pcrdb-backups
+```
+
+备份恢复验收必须包含两层：先由 Dokploy 恢复 `pcrdb-backups` 到未挂载临时卷，再将其中的 dump 恢复到临时 PostgreSQL，核对旧 PCRDB 表和 `clan_battle` 总量。
