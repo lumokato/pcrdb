@@ -7,9 +7,9 @@ from pathlib import Path
 import sys
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src' / 'pcrdb'))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from db.connection import get_connection
+from pcrdb.db.connection import get_connection
 
 
 def create_accounts_table():

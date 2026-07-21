@@ -4,21 +4,18 @@ pcrdb Web API 服务
 """
 from fastapi import FastAPI, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
-import sys
 from pathlib import Path
-
-# 添加项目路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / '.env')
 
-from src.pcrdb.analysis.clan import get_clan_history, get_clan_power_ranking, get_clan_members, get_top_clans, get_top_clan_profiles
-from src.pcrdb.analysis.grand import get_winning_ranking
-from src.pcrdb.analysis.player import get_player_clan_history, search_players_by_name, get_available_periods
-from src.pcrdb.auth import (
+from pcrdb.analysis.clan import get_clan_history, get_clan_power_ranking, get_clan_members, get_top_clans, get_top_clan_profiles
+from pcrdb.analysis.grand import get_winning_ranking
+from pcrdb.analysis.player import get_player_clan_history, search_players_by_name, get_available_periods
+from pcrdb.auth import (
     authenticate_user, create_user, create_access_token,
     get_current_user, get_user_by_username, get_user_by_qq,
     log_api_call, verify_password, update_password,
@@ -29,7 +26,7 @@ from src.pcrdb.auth import (
 app = FastAPI(
     title="pcrdb API",
     description="公主连结渠道服数据查询 API",
-    version="1.0.1"
+    version="1.1.0"
 )
 
 # CORS 配置 - 允许本地前端访问
@@ -47,10 +44,10 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get("/api/health")
 async def root():
-    """版本信息"""
-    return {"message": "pcrdb API", "version": "1.0.1"}
+    """Container and HTTP health check."""
+    return {"status": "ok", "service": "pcrdb", "version": "1.1.0"}
 
 
 # === 认证 API ===
@@ -205,7 +202,7 @@ async def admin_task_logs(
     user: dict = Depends(get_current_admin_user)
 ):
     """获取定时任务执行日志"""
-    from src.pcrdb.db.task_logger import get_recent_logs
+    from pcrdb.db.task_logger import get_recent_logs
     logs = get_recent_logs(limit=limit, task_name=task_name)
     return {"logs": logs}
 
@@ -262,7 +259,7 @@ async def api_profile_dates(
     user: dict = Depends(get_current_active_user)
 ):
     """获取可用的 profile 日期列表"""
-    from src.pcrdb.db.connection import get_connection
+    from pcrdb.db.connection import get_connection
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -327,45 +324,10 @@ async def api_player_periods(
 
 
 
-# === 会战 API 代理（解决跨域问题）===
-import httpx
-from fastapi import Request, Response
+from pcrdb.clan_battle.api import router as clan_battle_router
 
-import os
+app.include_router(clan_battle_router)
 
-CLAN_BATTLE_API = os.environ["CLAN_BATTLE_API_URL"]
-
-
-@app.get("/proxy/current/getalltime/qd")
-async def proxy_current_time():
-    """代理：获取当期会战时间点"""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{CLAN_BATTLE_API}/current/getalltime/qd")
-        return resp.json()
-
-
-@app.get("/proxy/history/getalltime/qd")
-async def proxy_history_time():
-    """代理：获取历史会战月份"""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{CLAN_BATTLE_API}/history/getalltime/qd")
-        return resp.json()
-
-
-@app.post("/proxy/search")
-async def proxy_search(request: Request):
-    """代理：搜索公会排名"""
-    body = await request.json()
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{CLAN_BATTLE_API}/search", json=body)
-        return resp.json()
-
-
-@app.post("/proxy/search/scoreline")
-async def proxy_scoreline(request: Request):
-    """代理：查档线"""
-    body = await request.json()
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{CLAN_BATTLE_API}/search/scoreline", json=body)
-        return resp.json()
+frontend_dir = Path(__file__).resolve().parents[2] / "frontend"
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 

@@ -1,114 +1,70 @@
-# pcrdb - 公主连结数据采集系统
+# pcrdb
 
-从公主连结游戏 API 采集公会、成员、竞技场等数据的 ETL 工具。
+公主连结渠道服数据采集、分析与会战排名查询服务。PCRDB 与 ClanRank 已合并为一个 GitOps 项目。
 
-## 快速开始
+## 运行结构
 
-### 方式一：Docker 部署 (推荐)
+- `db`: PostgreSQL 17，复用外部卷 `pcrdb-data`，启动时应用 schema migration 和角色授权。
+- `web`: 单个 FastAPI 进程，同时提供 `/api/*` 和 `frontend/` 静态站点。
+- `worker`: APScheduler 进程，运行原 PCRDB 任务和会战状态机采集。
 
-最简单的方式是使用 Docker Compose 一键启动数据库和应用。
+浏览器直接访问 `/api/clan-battle/*`，不再使用 `/proxy` 或独立 ClanRank 服务。
 
-1. **准备配置**:
-   复制 `.env.example` 为 `.env` 并填入数据库密码：
+## GitOps 部署
 
-   ```bash
-   cp .env.example .env
-   ```
-2. **启动服务**:
+Dokploy Compose 使用仓库根目录的 `docker-compose.yml`。先从 `.env.example` 配置环境变量；所有密码和密钥只保存在 Dokploy 环境变量或授权的秘密存储中。
 
-   ```bash
-   docker-compose up -d
-   ```
+首次切换时保持：
 
-### 方式二：本地运行
-
-1. **安装依赖**:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. **配置数据库**:
-   确保本地安装了 PostgreSQL，并在 `.env` 中配置连接信息。
-3. **运行任务**:
-
-   ```bash
-   python cli.py task clan_sync
-   ```
-
-## 目录结构
-
-```
-pcrdb/
-├── cli.py              # 命令行入口
-├── scheduler.py        # 任务调度器
-├── docker-compose.yml  # Docker 编排配置
-├── src/pcrdb/          # 源代码
-│   ├── api/            # 游戏 API 客户端
-│   ├── models/         # 数据库模型
-│   ├── tasks/          # 采集任务逻辑
-│   └── analysis/       # 数据分析模块
-├── config/             # 配置文件 (需自行创建/配置)
-│   ├── accounts.json   # 游戏账号配置 (敏感信息，不上传)
-│   ├── schedule.yaml   # 任务调度配置
-│   └── unit_id.json    # 角色 ID 映射
-└── docs/               # 文档和示例文件
+```text
+CLAN_BATTLE_COLLECTION_ENABLED=false
 ```
 
-## 配置说明
+历史 CSV 导入和校验通过后，再改为 `true`。
 
-本项目依赖 `config/` 目录下的配置文件运行。
-
-1. **账号配置** (`config/accounts.json`):
-   包含游戏账号的认证信息。**请勿提交此文件到版本控制。**
-2. **调度配置** (`config/schedule.yaml`):
-   定义定时任务的执行规则。可参考 `docs/schedule.yaml` (如果存在) 或创建新文件。
-3. **环境变量** (`.env`):
-   定义数据库连接信息和访问密钥。参考 `.env.example`。
-
-## CLI 命令
-
-使用 `cli.py` 手动运行采集任务。
+## 本地命令
 
 ```bash
-# 查看帮助
-python cli.py --help
-
-# 运行特定任务
-python cli.py task <task_name> [args]
-```
-
-### 可用任务
-
-| 任务名称                | 描述                     | 参数示例                         |
-| :---------------------- | :----------------------- | :------------------------------- |
-| `clan_sync`           | 同步公会及成员信息       | (无)                             |
-| `grand_sync`          | 同步公主竞技场(PJJC)排名 | (无)                             |
-| `arena_deck_sync`     | 同步竞技场防守阵容       | (无)                             |
-| `player_profile_sync` | 同步玩家详细档案         | `mode=top_clans rank_limit=30` |
-
-### 示例
-
-```bash
-# 采集前30名公会的成员档案
+python cli.py task clan_sync
 python cli.py task player_profile_sync --args mode=top_clans rank_limit=30
-
-# 如果配置了月度全量模式
-python cli.py task player_profile_sync --args mode=active_all
+python -m pcrdb.worker
 ```
 
-## 任务调度
+本地运行模块时将 `src` 加入 `PYTHONPATH`，容器镜像已预先配置。
 
-本项目包含一个基于 Python 的调度器 `scheduler.py`，用于按计划自动执行上述任务。
+## 会战 CSV 导入
+
+导入器接受多个不可变来源，先干跑检查时间冲突：
 
 ```bash
-python scheduler.py
+python -m pcrdb.clan_battle.importer \
+  --source local=/migration/local/qd \
+  --source uk03=/migration/uk03/qd \
+  --source kr01=/migration/kr01/qd \
+  --dry-run
 ```
 
-调度规则在 `config/schedule.yaml` 中配置。
+确认 `conflicts` 为空后去掉 `--dry-run`。重复文件、相同时间的前缀文件、源哈希、规范化内容哈希、行数和目标快照都会写入 `clan_battle.import_files`。
 
-## 文档列表
+导入后执行：
 
-- [数据库管理](docs/DATABASE.md): Schema 执行、验证与修复
-- [开发指南](docs/DEVELOPMENT.md): 如何添加新功能
-- [API 规范](docs/ANALYSIS_API.md): 查询接口定义
-- [功能特性](docs/FEATURES.md): 功能清单与优先级
+```bash
+python -m pcrdb.clan_battle.verify \
+  --manifest /migration/verification/clanrank-import-manifest.jsonl
+```
+
+只有验证结果 `ok: true`、逻辑备份恢复抽检通过、原生 API 可查询且新 Worker 影子运行正常后，才能删除旧 CSV 和旧服务。
+
+## 会战调度
+
+Worker 每个北京时间 `00/30` 分运行一次：
+
+1. 每月 20 日后，对比第一页与上期最终榜指纹，直到新非空榜出现。
+2. 会战中每 30 分钟保存前 300 名。
+3. 连续成功空响应后进入结算等待；网络或协议错误不计为空响应。
+4. 同月内数据重新出现时恢复为会战中，避免短暂空榜被误判成最终榜。
+5. 次月最终榜出现后抓取全部排名，连续两次内容一致才标记为 final。
+6. 到次月 20 日仍无可靠最终榜时，旧月份保留为 settlement，并自动等待新会战。
+7. 状态保存在 PostgreSQL，并使用 advisory lock 防止重复 Worker。
+
+普通 PCRDB 任务继续读取 `config/schedule.yaml`，由 APScheduler 执行完整 cron 表达式；`L-N` 仍表示当月倒数第 `N+1` 天。

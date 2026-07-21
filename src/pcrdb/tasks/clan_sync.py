@@ -6,12 +6,8 @@ import time
 from typing import Dict, Any, List
 from datetime import datetime
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from tasks.base import TaskQueue
-from db.connection import get_connection, insert_snapshots_batch, get_config
+from pcrdb.tasks.base import TaskQueue
+from pcrdb.db.connection import get_connection, insert_snapshots_batch, get_config
 
 
 def build_query_list(new_clan_add: int = 100) -> List[int]:
@@ -189,7 +185,7 @@ def insert_clan_batch(data_batch: List[Dict]):
 
 def run(new_clan_add: int = 100):
     """运行公会信息同步任务"""
-    from db.task_logger import TaskLogger
+    from pcrdb.db.task_logger import TaskLogger
     
     print("=" * 60)
     print(f"公会信息同步任务 (PostgreSQL)")

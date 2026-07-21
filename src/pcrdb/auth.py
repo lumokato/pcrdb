@@ -11,10 +11,12 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from src.pcrdb.db.connection import create_connection
+from pcrdb.db.connection import create_connection
 
 # 配置
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "pcrdb_secret_key_change_in_production")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY is required")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 

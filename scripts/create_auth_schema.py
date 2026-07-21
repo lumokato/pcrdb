@@ -1,5 +1,10 @@
 """创建 auth schema 和表"""
-from src.pcrdb.db.connection import create_connection
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from pcrdb.db.connection import create_connection
 
 conn = create_connection()
 cur = conn.cursor()

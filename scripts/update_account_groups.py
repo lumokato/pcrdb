@@ -7,10 +7,10 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src' / 'pcrdb'))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from api.endpoints import create_client
-from db.connection import get_accounts, update_account
+from pcrdb.api.endpoints import create_client
+from pcrdb.db.connection import get_accounts, update_account
 
 
 async def update_account_worker(account):

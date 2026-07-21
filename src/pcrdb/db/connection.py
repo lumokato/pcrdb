@@ -55,6 +55,7 @@ def get_config() -> Dict[str, Any]:
     sync_num = int(os.getenv('PCRDB_SYNC_NUM', '10'))
     batch_size = int(os.getenv('PCRDB_BATCH_SIZE', '30'))
     access_key = os.getenv('PCRDB_ACCESS_KEY', '')
+    connect_timeout = int(os.getenv('PCRDB_CONNECT_TIMEOUT', '10'))
 
     _config = {
         'host': host,
@@ -64,7 +65,8 @@ def get_config() -> Dict[str, Any]:
         'password': password,
         'sync_num': sync_num,
         'batch_size': batch_size,
-        'access_key': access_key
+        'access_key': access_key,
+        'connect_timeout': connect_timeout,
     }
     return _config
 
@@ -84,7 +86,9 @@ def create_connection(**kwargs):
         'port': config['port'],
         'database': config['database'],
         'user': config['user'],
-        'password': config['password']
+        'password': config['password'],
+        'connect_timeout': config['connect_timeout'],
+        'application_name': os.getenv('PCRDB_APPLICATION_NAME', 'pcrdb')
     }
     conn_args.update(kwargs)
     

@@ -1,4 +1,3 @@
-```
 """
 公会数据分析模块
 提供公会历史追溯、成员查询等功能
@@ -11,7 +10,7 @@ from pathlib import Path
 # Add src to path to allow imports from db.connection
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from db.connection import get_connection
+from pcrdb.db.connection import get_connection
 
 def query_member_history(viewer_id: int) -> List[Dict]:
     """

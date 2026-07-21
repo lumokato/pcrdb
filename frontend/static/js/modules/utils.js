@@ -4,9 +4,8 @@
  */
 
 // API 配置
-// API 配置
 export const LOCAL_API = '';
-export const CLAN_BATTLE_API = '/proxy';
+export const CLAN_BATTLE_API = '/api/clan-battle';
 
 /**
  * 格式化日期

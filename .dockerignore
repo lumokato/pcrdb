@@ -1,0 +1,13 @@
+.git
+.agent
+.env
+__pycache__
+*.py[cod]
+.pytest_cache
+data
+docs
+pgdata
+tests
+config/accounts.json
+config/config.json
+*.log

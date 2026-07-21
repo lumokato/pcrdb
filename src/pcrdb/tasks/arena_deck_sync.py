@@ -8,12 +8,8 @@ import os
 from datetime import datetime
 from typing import Dict, Any, List
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from api.endpoints import PCRApi, create_client
-from db.connection import get_accounts_by_group, insert_snapshots_batch
+from pcrdb.api.endpoints import PCRApi, create_client
+from pcrdb.db.connection import get_accounts_by_group, insert_snapshots_batch
 from psycopg2.extras import Json
 
 # 用于统计实际获取的记录数
@@ -107,7 +103,7 @@ async def run_async():
 
 def run():
     """运行 JJC 防守阵容采集任务"""
-    from db.task_logger import TaskLogger
+    from pcrdb.db.task_logger import TaskLogger
     global _fetch_counter
     
     print("=" * 60)

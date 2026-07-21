@@ -16,7 +16,7 @@ python serve.py          # http://localhost:8433
 
 # 后端
 cd ..
-python -m uvicorn src.pcrdb.server:app --reload --host 127.0.0.1 --port 8000
+PYTHONPATH=src python -m uvicorn pcrdb.server:app --reload --host 127.0.0.1 --port 8000
 ```
 
 > ⚠️ 不能使用 `python -m http.server`，它不支持 ES Module 的正确 MIME 类型。

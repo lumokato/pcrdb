@@ -3,18 +3,14 @@
 提供并发数据采集的基础设施
 """
 import os
+import sys
 import time
 import math
 import asyncio
 from datetime import datetime
 from typing import List, Dict, Any, Callable, Optional
-from pathlib import Path
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from api.endpoints import PCRApi, create_client
-from db.connection import get_accounts, Account
+from pcrdb.api.endpoints import PCRApi, create_client
+from pcrdb.db.connection import get_accounts, Account
 
 
 class TaskQueue:

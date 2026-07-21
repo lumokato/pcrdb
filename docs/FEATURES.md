@@ -74,4 +74,4 @@
 ## 定时调度
 
 - 配置：`config/schedule.yaml`
-- 入口：`scheduler.py`
+- 入口：`python -m pcrdb.worker`（APScheduler）

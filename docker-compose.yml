@@ -1,20 +1,108 @@
-version: '3.8'
-
 services:
   db:
-    image: postgres:17-alpine
-    container_name: pcrdb_container
-    restart: always
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${PCRDB_USER}
-      POSTGRES_PASSWORD: ${PCRDB_PASSWORD}
-      POSTGRES_DB: ${PCRDB_DATABASE}
-    ports:
-      - "127.0.0.1:${PCRDB_PORT:-5432}:5432"
+      POSTGRES_USER: ${PCRDB_ADMIN_USER:?PCRDB_ADMIN_USER is required}
+      POSTGRES_PASSWORD: ${PCRDB_ADMIN_PASSWORD:?PCRDB_ADMIN_PASSWORD is required}
+      POSTGRES_DB: ${PCRDB_DATABASE:-pcrdb}
+      PCRDB_WEB_PASSWORD: ${PCRDB_WEB_PASSWORD:?PCRDB_WEB_PASSWORD is required}
+      PCRDB_WORKER_PASSWORD: ${PCRDB_WORKER_PASSWORD:?PCRDB_WORKER_PASSWORD is required}
+      TZ: Asia/Shanghai
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
+      - pcrdb-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+          && test -f "$${PGDATA}/.pcrdb-migrations-ready"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "10m"
+        max-size: 10m
         max-file: "3"
+
+  web:
+    build: .
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - uvicorn
+      - pcrdb.server:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    environment:
+      PCRDB_HOST: db
+      PCRDB_PORT: "5432"
+      PCRDB_DATABASE: ${PCRDB_DATABASE:-pcrdb}
+      PCRDB_USER: pcrdb_web
+      PCRDB_PASSWORD: ${PCRDB_WEB_PASSWORD:?PCRDB_WEB_PASSWORD is required}
+      PCRDB_APPLICATION_NAME: pcrdb-web
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      TZ: Asia/Shanghai
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "pcrdb.worker"]
+    environment:
+      PCRDB_HOST: db
+      PCRDB_PORT: "5432"
+      PCRDB_DATABASE: ${PCRDB_DATABASE:-pcrdb}
+      PCRDB_USER: pcrdb_worker
+      PCRDB_PASSWORD: ${PCRDB_WORKER_PASSWORD:?PCRDB_WORKER_PASSWORD is required}
+      PCRDB_APPLICATION_NAME: pcrdb-worker
+      PCRDB_SYNC_NUM: ${PCRDB_SYNC_NUM:-10}
+      PCRDB_BATCH_SIZE: ${PCRDB_BATCH_SIZE:-30}
+      CLAN_BATTLE_COLLECTION_ENABLED: ${CLAN_BATTLE_COLLECTION_ENABLED:-false}
+      CLAN_BATTLE_ACCOUNT_UID: ${CLAN_BATTLE_ACCOUNT_UID:-}
+      CLAN_BATTLE_RUN_ON_START: ${CLAN_BATTLE_RUN_ON_START:-true}
+      CLAN_BATTLE_PROGRESS_PAGES: ${CLAN_BATTLE_PROGRESS_PAGES:-30}
+      CLAN_BATTLE_FINAL_PAGES: ${CLAN_BATTLE_FINAL_PAGES:-300}
+      CLAN_BATTLE_EMPTY_THRESHOLD: ${CLAN_BATTLE_EMPTY_THRESHOLD:-2}
+      CLAN_BATTLE_FINAL_STABLE_COUNT: ${CLAN_BATTLE_FINAL_STABLE_COUNT:-2}
+      TZ: Asia/Shanghai
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  pcrdb-data:
+    external: true

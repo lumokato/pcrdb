@@ -7,12 +7,8 @@ from typing import Dict, Any, List, Tuple
 from datetime import datetime
 from psycopg2.extras import Json
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from tasks.base import TaskQueue
-from db.connection import get_connection, insert_snapshots_batch, get_config
+from pcrdb.tasks.base import TaskQueue
+from pcrdb.db.connection import get_connection, insert_snapshots_batch, get_config
 
 
 def get_target_players(mode: str = 'top_clans', rank_limit: int = 30) -> Tuple[List[int], Dict[int, Dict]]:
@@ -203,7 +199,7 @@ def run(mode: str = 'top_clans', rank_limit: int = 30):
         mode: 'top_clans' 每日模式（前N公会）, 'active_all' 月度模式（所有活跃玩家）
         rank_limit: 公会排名限制
     """
-    from db.task_logger import TaskLogger
+    from pcrdb.db.task_logger import TaskLogger
     
     print("=" * 60)
     print("玩家档案同步任务 (PostgreSQL)")

@@ -119,7 +119,7 @@ class PCRApi:
         Returns:
             会战排名列表
         """
-        result = await self._safe_call('clan_battle/period_ranking', {
+        result = await self._safe_call('/clan_battle/period_ranking', {
             'clan_id': clan_id, 
             'clan_battle_id': -1, 
             'period': -1, 

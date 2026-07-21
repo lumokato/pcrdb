@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple, Any
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from db.connection import get_connection
+from pcrdb.db.connection import get_connection
 
 DATA_DIR = Path(__file__).parent.parent.parent.parent / 'data'
 

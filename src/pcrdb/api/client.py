@@ -2,8 +2,9 @@
 PCR 客户端模块
 负责与公主连结游戏服务器的网络通信，包括加密、解密和请求处理
 """
-import requests
+import asyncio
 import hashlib
+import os
 import random
 from Crypto.Cipher import AES
 import base64
@@ -12,20 +13,28 @@ import uuid
 from dateutil.parser import parse
 from datetime import datetime
 from re import search
-import time
 from json import loads
 from pathlib import Path
 import aiohttp
 
 
+class PCRClientError(RuntimeError):
+    """Base error for game API communication."""
+
+
+class PCRTransportError(PCRClientError):
+    """The request failed at the HTTP or network layer."""
+
+
+class PCRProtocolError(PCRClientError):
+    """The game server returned a response that could not be decoded."""
+
+
 # 版本配置
 _version_file = Path(__file__).parent.parent.parent.parent / 'version.txt'
-_version = "10.7.1"
-
-if _version_file.exists():
+_version = os.getenv("PCR_APP_VERSION", "").strip() or "11.4.0"
+if _version_file.exists() and not os.getenv("PCR_APP_VERSION", "").strip():
     _version = _version_file.read_text(encoding='utf-8').strip()
-else:
-    _version_file.write_text(_version, encoding='utf-8')
 
 
 # AES 加密初始向量
@@ -59,16 +68,15 @@ def decrypt(encrypted: bytes) -> dict:
         result = msgpack.unpackb(plain[:-plain[-1]], strict_map_key=False)
         if isinstance(result, dict):
             return result
-        else:
-            print(f"\n[DECRYPT] Unexpected type: {type(result).__name__} = {str(result)[:100]}")
-            return {"data_headers": {}, "data": {}}
+        raise PCRProtocolError(f"unexpected decrypted response type: {type(result).__name__}")
     except msgpack.ExtraData as err:
         if isinstance(err.unpacked, dict):
             return err.unpacked
-        return {"data_headers": {}, "data": {}}
+        raise PCRProtocolError(f"unexpected unpacked response type: {type(err.unpacked).__name__}") from err
+    except PCRProtocolError:
+        raise
     except Exception as e:
-        print(f"\n[DECRYPT ERROR] {e}")
-        return {"data_headers": {}, "data": {}}
+        raise PCRProtocolError(f"failed to decrypt game response: {e}") from e
 
 
 def encrypt(text: str, key: bytes) -> bytes:
@@ -104,6 +112,7 @@ class PCRClient:
     
     # 服务器地址
     URL_ROOT = "https://l3-prod-uo-gs-gzlj.bilibiligame.net/"
+    OFFICIAL_CONFIG_URL = "https://static.biligame.com/config/pcr.config.js"
     
     def __init__(self, viewer_id: int):
         self.viewer_id = viewer_id
@@ -156,19 +165,32 @@ class PCRClient:
         if self.session_id:
             headers["SID"] = self.session_id
         
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as session:
-            response = await session.post(self.URL_ROOT + endpoint, data=data, headers=headers)
-            resp_data = await response.content.read()
+        timeout = aiohttp.ClientTimeout(
+            total=float(os.getenv("PCR_API_TIMEOUT_TOTAL", "60")),
+            connect=float(os.getenv("PCR_API_TIMEOUT_CONNECT", "10")),
+            sock_read=float(os.getenv("PCR_API_TIMEOUT_READ", "45")),
+        )
+        url = self.URL_ROOT + endpoint.lstrip("/")
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(url, data=data, headers=headers) as response:
+                    resp_data = await response.read()
+                    if not 200 <= response.status < 300:
+                        raise PCRTransportError(f"HTTP {response.status} from {endpoint}")
+        except PCRClientError:
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            raise PCRTransportError(f"request failed for {endpoint}: {exc}") from exc
         
         if encrypted:
             result = decrypt(resp_data)
         else:
             result = loads(resp_data.decode())
         
-        # 确保 result 是字典
         if not isinstance(result, dict):
-            print(f"\n[API ERROR] Unexpected result type from {endpoint}: {type(result).__name__} = {str(result)[:200]}")
-            return {}
+            raise PCRProtocolError(f"invalid response type from {endpoint}: {type(result).__name__}")
+        if "data_headers" not in result or "data" not in result:
+            raise PCRProtocolError(f"response from {endpoint} is missing data headers or data")
         
         ret_header = result.get("data_headers", {})
         if not isinstance(ret_header, dict):
@@ -194,26 +216,62 @@ class PCRClient:
         
         data = result.get("data", {})
         if not isinstance(data, dict):
-            return {}
+            raise PCRProtocolError(f"response data from {endpoint} is {type(data).__name__}")
         return data
+
+    async def _refresh_app_version(self) -> str:
+        timeout = aiohttp.ClientTimeout(total=15, connect=10, sock_read=10)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(self.OFFICIAL_CONFIG_URL) as response:
+                    if not 200 <= response.status < 300:
+                        raise PCRTransportError(
+                            f"HTTP {response.status} while checking the official app version"
+                        )
+                    config = await response.text()
+        except PCRClientError:
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            raise PCRTransportError(f"failed to check the official app version: {exc}") from exc
+
+        match = search(r'"latest_version"\s*:\s*"(\d+\.\d+\.\d+)"', config)
+        if not match:
+            raise PCRProtocolError("official app config does not contain latest_version")
+
+        version = match.group(1)
+        global _version
+        _version = version
+        self.headers["APP-VER"] = version
+        return version
     
     async def login(self, uid: str, access_key: str) -> tuple:
         """登录游戏"""
         # 检查维护状态
+        version_refreshed = False
         while True:
             self.manifest = await self.call_api('source_ini/get_maintenance_status', {}, False)
-            if 'maintenance_message' not in self.manifest:
+            if 'maintenance_message' in self.manifest:
+                try:
+                    match = search(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}',
+                                   self.manifest['maintenance_message']).group()
+                    end = parse(match)
+                    print(f'服务器维护中，预计结束时间: {match}')
+                    while datetime.now() < end:
+                        await asyncio.sleep(60)
+                except Exception:
+                    print('服务器维护中，等待 60 秒后重试...')
+                    await asyncio.sleep(60)
+                continue
+
+            if 'required_manifest_ver' in self.manifest:
                 break
-            try:
-                match = search(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', 
-                              self.manifest['maintenance_message']).group()
-                end = parse(match)
-                print(f'服务器维护中，预计结束时间: {match}')
-                while datetime.now() < end:
-                    time.sleep(60)
-            except Exception:
-                print('服务器维护中，等待 60 秒后重试...')
-                time.sleep(60)
+
+            if 'server_error' in self.manifest and not version_refreshed:
+                await self._refresh_app_version()
+                version_refreshed = True
+                continue
+
+            raise PCRProtocolError("maintenance response is missing required_manifest_ver")
         
         # 设置 manifest 版本
         self.headers["MANIFEST-VER"] = self.manifest["required_manifest_ver"]

@@ -3,9 +3,27 @@
  */
 import { CLAN_BATTLE_API } from './utils.js';
 
-/**
- * 创建会战查询模块
- */
+
+const compactDateTime = (value) => {
+    const date = new Date(value);
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Shanghai',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23'
+        }).formatToParts(date).map(part => [part.type, part.value])
+    );
+    return {
+        date: `${parts.year}${parts.month}${parts.day}`,
+        time: `${parts.hour}${parts.minute}`
+    };
+};
+
+
 export function useClanBattle() {
     const { reactive } = Vue;
 
@@ -13,7 +31,9 @@ export function useClanBattle() {
         mode: 'current',
         loading: false,
         timeData: {},
+        snapshotMap: {},
         historyData: [],
+        currentPeriod: '',
         selectedDate: '',
         selectedTime: '',
         selectedHistory: '',
@@ -26,39 +46,72 @@ export function useClanBattle() {
         errorMsg: ''
     });
 
-    // 加载当期时间
+    const getJson = async (url) => {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || '请求失败');
+        }
+        return data;
+    };
+
+    const loadPeriods = async () => {
+        const data = await getJson(`${CLAN_BATTLE_API}/periods`);
+        clanBattle.historyData = data.items.map(item => item.period.slice(0, 7));
+        if (clanBattle.historyData.length > 0) {
+            clanBattle.selectedHistory = clanBattle.historyData[0];
+            clanBattle.currentPeriod = clanBattle.historyData[0];
+        }
+    };
+
+    const loadSnapshots = async (period) => {
+        const data = await getJson(`${CLAN_BATTLE_API}/snapshots?period=${encodeURIComponent(period)}`);
+        const timeData = {};
+        const snapshotMap = {};
+
+        for (const snapshot of data.items) {
+            if (!snapshot.captured_at) continue;
+            const parts = compactDateTime(snapshot.captured_at);
+            if (!timeData[parts.date]) timeData[parts.date] = [];
+            if (!timeData[parts.date].includes(parts.time)) timeData[parts.date].push(parts.time);
+            snapshotMap[`${parts.date}${parts.time}`] = snapshot.snapshot_id;
+        }
+
+        for (const times of Object.values(timeData)) times.sort();
+        clanBattle.timeData = timeData;
+        clanBattle.snapshotMap = snapshotMap;
+
+        const dates = Object.keys(timeData).sort();
+        if (dates.length > 0) {
+            clanBattle.selectedDate = dates[dates.length - 1];
+            const times = timeData[clanBattle.selectedDate];
+            clanBattle.selectedTime = times[times.length - 1];
+        }
+    };
+
     const loadClanBattleTime = async () => {
+        clanBattle.loading = true;
         try {
-            const res = await fetch(`${CLAN_BATTLE_API}/current/getalltime/qd`);
-            const data = await res.json();
-            clanBattle.timeData = data.data?.['1'] || {};
-
-            const dates = Object.keys(clanBattle.timeData);
-            if (dates.length > 0) {
-                clanBattle.selectedDate = dates[dates.length - 1];
-                const times = clanBattle.timeData[clanBattle.selectedDate];
-                clanBattle.selectedTime = times[times.length - 1];
-            }
-        } catch (e) {
-            console.error('加载时间数据失败:', e);
+            await loadPeriods();
+            if (clanBattle.currentPeriod) await loadSnapshots(clanBattle.currentPeriod);
+        } catch (error) {
+            showError(error.message);
+        } finally {
+            clanBattle.loading = false;
         }
     };
 
-    // 加载历史月份
     const loadClanBattleHistory = async () => {
+        clanBattle.loading = true;
         try {
-            const res = await fetch(`${CLAN_BATTLE_API}/history/getalltime/qd`);
-            const data = await res.json();
-            clanBattle.historyData = data.data?.['1'] || [];
-            if (clanBattle.historyData.length > 0) {
-                clanBattle.selectedHistory = clanBattle.historyData[clanBattle.historyData.length - 1];
-            }
-        } catch (e) {
-            console.error('加载历史数据失败:', e);
+            await loadPeriods();
+        } catch (error) {
+            showError(error.message);
+        } finally {
+            clanBattle.loading = false;
         }
     };
 
-    // 更新时间选项
     const updateTimeOptions = () => {
         const times = clanBattle.timeData[clanBattle.selectedDate];
         if (times && times.length > 0) {
@@ -66,81 +119,53 @@ export function useClanBattle() {
         }
     };
 
-    // 搜索会战
+    const selectionParams = () => {
+        if (clanBattle.mode === 'current') {
+            const snapshotId = clanBattle.snapshotMap[`${clanBattle.selectedDate}${clanBattle.selectedTime}`];
+            if (!snapshotId) throw new Error('当前没有可查询的快照');
+            return `snapshot_id=${snapshotId}`;
+        }
+        if (!clanBattle.selectedHistory) throw new Error('请选择历史月份');
+        return `period=${encodeURIComponent(clanBattle.selectedHistory)}`;
+    };
+
     const searchClanBattle = async (page = 0) => {
         clanBattle.loading = true;
         clanBattle.page = page;
-
-        let filename = '';
-        if (clanBattle.mode === 'current') {
-            filename = `qd/1/${clanBattle.selectedDate}${clanBattle.selectedTime}`;
-        } else {
-            filename = `qd/history/1/${clanBattle.selectedHistory}`;
-        }
-
         try {
-            const res = await fetch(`${CLAN_BATTLE_API}/search`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename,
-                    search: clanBattle.searchText,
-                    page: page,
-                    page_limit: clanBattle.limit
-                })
-            });
-            const data = await res.json();
-
-            if (data.state === 'success') {
-                clanBattle.results = data.data;
-                clanBattle.maxPage = Math.ceil(data.total / clanBattle.limit);
-            } else {
-                showError(data.error_message || '查询失败');
-            }
-        } catch (e) {
-            console.error('查询失败:', e);
+            const params = selectionParams();
+            const data = await getJson(
+                `${CLAN_BATTLE_API}/rankings?${params}`
+                + `&search=${encodeURIComponent(clanBattle.searchText)}`
+                + `&page=${page}&limit=${clanBattle.limit}`
+            );
+            clanBattle.results = data.items;
+            clanBattle.maxPage = Math.ceil(data.total / clanBattle.limit);
+        } catch (error) {
+            showError(error.message);
         } finally {
             clanBattle.loading = false;
         }
     };
 
-    // 搜索档线
     const searchScoreLine = async () => {
         clanBattle.loading = true;
-
-        let filename = '';
-        if (clanBattle.mode === 'current') {
-            filename = `qd/1/${clanBattle.selectedDate}${clanBattle.selectedTime}`;
-        } else {
-            filename = `qd/history/1/${clanBattle.selectedHistory}`;
-        }
-
         try {
-            const res = await fetch(`${CLAN_BATTLE_API}/search/scoreline`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename,
-                    search: clanBattle.searchText
-                })
-            });
-            const data = await res.json();
-
-            if (data.state === 'success') {
-                clanBattle.results = data.data;
-                clanBattle.maxPage = 1;
-                clanBattle.page = 0;
-            } else {
-                showError(data.error_message || '查询失败');
-            }
-        } catch (e) {
-            console.error('查询失败:', e);
+            const params = selectionParams();
+            const rank = /^\d+$/.test(clanBattle.searchText.trim())
+                ? `&rank=${clanBattle.searchText.trim()}`
+                : '';
+            const data = await getJson(`${CLAN_BATTLE_API}/scorelines?${params}${rank}`);
+            clanBattle.results = data.items;
+            clanBattle.maxPage = data.items.length > 0 ? 1 : 0;
+            clanBattle.page = 0;
+        } catch (error) {
+            showError(error.message);
         } finally {
             clanBattle.loading = false;
         }
     };
 
-    // 翻页
     const clanBattlePage = (delta) => {
         const newPage = clanBattle.page + delta;
         if (newPage >= 0 && newPage < clanBattle.maxPage) {
@@ -148,10 +173,9 @@ export function useClanBattle() {
         }
     };
 
-    // 显示错误
-    const showError = (msg) => {
+    const showError = (message) => {
         clanBattle.errorOccured = true;
-        clanBattle.errorMsg = msg;
+        clanBattle.errorMsg = message;
         setTimeout(() => { clanBattle.errorOccured = false; }, 3000);
     };
 

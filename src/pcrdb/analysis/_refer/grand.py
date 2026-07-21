@@ -10,7 +10,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from db.connection import get_connection
+from pcrdb.db.connection import get_connection
 
 def count_winning_num(filter_num: int = 4000) -> Dict[int, int]:
     """
