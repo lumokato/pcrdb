@@ -84,6 +84,8 @@ ARENA_ALERT_DINGTALK_SECRET=<optional signing secret>
 
 默认使用 `accounts` 表中的第一个活跃采集账号。需要固定登录账号时设置 `ARENA_ALERT_ACCOUNT_UID`。Webhook 和加签密钥只能放在部署环境中，不得提交到仓库。
 
+钉钉机器人使用安全关键词时需允许 `pcrjjc`，所有正式提醒都会在标题中包含该关键词。
+
 ## 数据库备份
 
 `backup` 服务启动后立即运行 `pg_dump`，并在写入正式文件前使用 `pg_restore --list` 校验。卷内默认只保留最新一份完整 dump 和对应 SHA256；Dokploy Volume Backup 再将这个已完成的文件卷上传到对象存储，不直接在线复制 PostgreSQL 数据目录。

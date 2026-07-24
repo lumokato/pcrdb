@@ -79,6 +79,7 @@ class RankDecisionTests(TestCase):
             observed_at,
         )
 
+        self.assertIn("pcrjjc", message)
         self.assertIn("竞技场：10 -> 14（下降 4 名）", message)
         self.assertIn("公主竞技场：20 -> 29（下降 9 名）", message)
         self.assertIn(str(TARGET_VIEWER_ID), message)

@@ -128,7 +128,7 @@ def format_notification(
 ) -> str:
     display_name = current.user_name or "玩家"
     lines = [
-        "【PCR竞技场提醒】",
+        "【pcrjjc 竞技场提醒】",
         f"{display_name}（{current.viewer_id}）",
     ]
     lines.extend(
