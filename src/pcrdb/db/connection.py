@@ -66,7 +66,7 @@ def get_config() -> Dict[str, Any]:
     database = os.getenv('PCRDB_DATABASE', 'pcrdb')
     user = os.getenv('PCRDB_USER', 'postgres')
     password = os.getenv('PCRDB_PASSWORD', '')
-    sync_num = int(os.getenv('PCRDB_SYNC_NUM', '4'))
+    sync_num = int(os.getenv('PCRDB_SYNC_NUM', '3'))
     batch_size = int(os.getenv('PCRDB_BATCH_SIZE', '30'))
     access_key = os.getenv('PCRDB_ACCESS_KEY', '')
     connect_timeout = int(os.getenv('PCRDB_CONNECT_TIMEOUT', '10'))

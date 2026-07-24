@@ -216,7 +216,7 @@ async def collect_tick(trigger_name: str = "cron") -> None:
         try:
             concurrency = max(
                 1,
-                min(16, int(os.getenv("CLAN_BATTLE_QUERY_CONCURRENCY", "4"))),
+                min(16, int(os.getenv("CLAN_BATTLE_QUERY_CONCURRENCY", "3"))),
             )
             leased_clients = await _lease_clients(concurrency)
             apis = [client for _, client in leased_clients]

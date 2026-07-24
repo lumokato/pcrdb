@@ -25,14 +25,14 @@ class FakeLease:
 
 
 class TaskQueueLeaseTests(IsolatedAsyncioTestCase):
-    def test_default_concurrency_is_four(self):
+    def test_default_concurrency_is_three(self):
         queue = TaskQueue(
             query_list=[1],
             data_processor=lambda value: value,
             pg_inserter=lambda values: None,
         )
 
-        self.assertEqual(queue.sync_num, 4)
+        self.assertEqual(queue.sync_num, 3)
 
     async def test_cancellation_releases_started_and_unstarted_leases(self):
         leases = [FakeLease(1), FakeLease(2)]
