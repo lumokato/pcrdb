@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime
 import logging
 import os
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from pcrdb.api.client import PCRClientError, PCRProtocolError, PCRTransportError
@@ -10,7 +12,6 @@ from pcrdb.api.endpoints import PCRApi
 from pcrdb.clan_battle.models import RankingRow, normalize_rows, probe_sha256, rows_sha256
 from pcrdb.clan_battle.repository import (
     advisory_lock,
-    get_worker_account,
     get_worker_state,
     latest_final_snapshot,
     mark_period_settlement,
@@ -54,19 +55,71 @@ async def _fetch_page(api: PCRApi, page: int) -> list[RankingRow]:
 
 
 async def _fetch_snapshot(
-    api: PCRApi,
+    apis: list[PCRApi],
     page_limit: int,
     first_page: list[RankingRow],
 ) -> tuple[list[RankingRow], int]:
+    if not apis:
+        raise RuntimeError("no logged-in account is available for clan battle collection")
+
     rows = list(first_page)
     pages_fetched = 1
-    for page in range(1, page_limit):
-        page_rows = await _fetch_page(api, page)
-        pages_fetched += 1
-        if not page_rows:
-            break
-        rows.extend(page_rows)
+    for start in range(1, page_limit, len(apis)):
+        page_numbers = list(range(start, min(start + len(apis), page_limit)))
+        page_results = await asyncio.gather(
+            *(
+                _fetch_page(apis[index % len(apis)], page)
+                for index, page in enumerate(page_numbers)
+            )
+        )
+        for page_rows in page_results:
+            pages_fetched += 1
+            if not page_rows:
+                return normalize_rows(rows), pages_fetched
+            rows.extend(page_rows)
     return normalize_rows(rows), pages_fetched
+
+
+async def _lease_clients(count: int) -> list[tuple[Any, PCRApi]]:
+    from pcrdb.account_pool import lease_accounts
+
+    leases = lease_accounts(count, "clan_battle")
+    if not leases:
+        raise RuntimeError("shared farm account pool has no account for clan battle")
+
+    clients = [
+        PCRApi(
+            lease.account.viewer_id or 0,
+            str(lease.account.uid),
+            lease.account.access_key,
+        )
+        for lease in leases
+    ]
+    try:
+        login_results = await asyncio.gather(
+            *(client.login() for client in clients),
+            return_exceptions=True,
+        )
+    except BaseException as exc:
+        for lease in leases:
+            try:
+                lease.release(False, type(exc).__name__)
+            except Exception:
+                logger.exception("Failed to release a cancelled clan battle account lease")
+        raise
+
+    ready: list[tuple[Any, PCRApi]] = []
+    for lease, client, result in zip(leases, clients, login_results):
+        if isinstance(result, BaseException):
+            try:
+                lease.release(False, type(result).__name__)
+            except Exception:
+                logger.exception("Failed to release a clan battle account after login failure")
+        else:
+            ready.append((lease, client))
+    if not ready:
+        raise RuntimeError("all leased clan battle accounts failed to log in")
+    return ready
 
 
 def _prepare_phase(state: dict, now: datetime) -> dict:
@@ -140,6 +193,7 @@ async def collect_tick(trigger_name: str = "cron") -> None:
     snapshot_id = None
     error_message = None
     details: dict[str, object] = {}
+    leased_clients: list[tuple[Any, PCRApi]] = []
 
     if os.getenv("CLAN_BATTLE_COLLECTION_ENABLED", "false").lower() != "true":
         logger.info("Clan battle collection is disabled")
@@ -160,10 +214,14 @@ async def collect_tick(trigger_name: str = "cron") -> None:
             return
 
         try:
-            account = get_worker_account()
-            api = PCRApi(account["viewer_id"], account["uid"], account["access_key"])
-            await api.login()
-            first_page = await _fetch_page(api, 0)
+            concurrency = max(
+                1,
+                min(16, int(os.getenv("CLAN_BATTLE_QUERY_CONCURRENCY", "4"))),
+            )
+            leased_clients = await _lease_clients(concurrency)
+            apis = [client for _, client in leased_clients]
+            details["account_count"] = len(apis)
+            first_page = await _fetch_page(apis[0], 0)
             pages_fetched = 1
 
             if phase_before == "waiting_start":
@@ -194,7 +252,7 @@ async def collect_tick(trigger_name: str = "cron") -> None:
                         )
                     else:
                         rows, pages_fetched = await _fetch_snapshot(
-                            api,
+                            apis,
                             int(os.getenv("CLAN_BATTLE_PROGRESS_PAGES", "30")),
                             first_page,
                         )
@@ -235,7 +293,7 @@ async def collect_tick(trigger_name: str = "cron") -> None:
                     )
                 else:
                     rows, pages_fetched = await _fetch_snapshot(
-                        api,
+                        apis,
                         int(os.getenv("CLAN_BATTLE_PROGRESS_PAGES", "30")),
                         first_page,
                     )
@@ -267,7 +325,7 @@ async def collect_tick(trigger_name: str = "cron") -> None:
                     )
                 elif not _is_final_data_window(active_period, started_at):
                     rows, pages_fetched = await _fetch_snapshot(
-                        api,
+                        apis,
                         int(os.getenv("CLAN_BATTLE_PROGRESS_PAGES", "30")),
                         first_page,
                     )
@@ -294,7 +352,7 @@ async def collect_tick(trigger_name: str = "cron") -> None:
                     )
                 else:
                     rows, pages_fetched = await _fetch_snapshot(
-                        api,
+                        apis,
                         int(os.getenv("CLAN_BATTLE_FINAL_PAGES", "300")),
                         first_page,
                     )
@@ -328,6 +386,10 @@ async def collect_tick(trigger_name: str = "cron") -> None:
                     )
 
             details["period"] = str(active_period)
+        except asyncio.CancelledError:
+            result_type = "cancelled"
+            error_message = "clan battle collection was cancelled"
+            raise
         except PCRTransportError as exc:
             result_type = "network_error"
             error_message = str(exc)
@@ -365,6 +427,19 @@ async def collect_tick(trigger_name: str = "cron") -> None:
             )
             logger.exception("Clan battle worker failed")
         finally:
+            lease_success = error_message is None
+            release_errors = 0
+            for lease, _ in leased_clients:
+                try:
+                    lease.release(
+                        success=lease_success,
+                        error_type=None if lease_success else result_type,
+                    )
+                except Exception:
+                    release_errors += 1
+                    logger.exception("Failed to release a clan battle account lease")
+            if release_errors:
+                details["account_release_errors"] = release_errors
             finished_at = datetime.now(BEIJING)
             record_collection_run(
                 trigger_name=trigger_name,

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from datetime import datetime
 import hashlib
@@ -194,6 +195,20 @@ class FakeConnection:
         self.closed = True
 
 
+class FakeLease:
+    def __init__(self):
+        self.account = type("FakeAccount", (), {"id": 1})()
+        self.client_data = {
+            "vid": 1111111111111,
+            "uid": "login-uid",
+            "access_key": "access-key",
+        }
+        self.releases = []
+
+    def release(self, success=True, error_type=None):
+        self.releases.append((success, error_type))
+
+
 class MonitorTests(IsolatedAsyncioTestCase):
     def make_monitor(self, connection, current, notifier):
         client = AsyncMock()
@@ -215,6 +230,7 @@ class MonitorTests(IsolatedAsyncioTestCase):
             notifier=notifier,
             connection_factory=lambda **kwargs: connection,
             client_factory=client_factory,
+            lease_factory=lambda purpose: FakeLease(),
         )
         return monitor
 
@@ -257,6 +273,29 @@ class MonitorTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(connection.state, previous)
         self.assertTrue(connection.closed)
+
+    async def test_cancelled_query_releases_the_account(self):
+        connection = FakeConnection()
+        notifier = AsyncMock()
+        lease = FakeLease()
+        client = AsyncMock()
+        client.query_profile.side_effect = asyncio.CancelledError()
+        config = ArenaAlertConfig(
+            target_viewer_id=TARGET_VIEWER_ID,
+            webhook_url="https://oapi.dingtalk.com/robot/send?access_token=test",
+        )
+        monitor = ArenaAlertMonitor(
+            config,
+            notifier=notifier,
+            connection_factory=lambda **kwargs: connection,
+            client_factory=AsyncMock(return_value=client),
+            lease_factory=lambda purpose: lease,
+        )
+
+        with self.assertRaises(asyncio.CancelledError):
+            await monitor._query_current_ranks()
+
+        self.assertEqual(lease.releases, [(False, "CancelledError")])
 
 
 if __name__ == "__main__":

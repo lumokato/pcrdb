@@ -3,7 +3,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import date, datetime
 import json
-import os
 from typing import Any, Iterator, Sequence
 
 import psycopg2
@@ -184,38 +183,6 @@ def save_snapshot(
     finally:
         if owns_connection:
             conn.close()
-
-
-def get_worker_account() -> dict[str, Any]:
-    requested_uid = os.getenv("CLAN_BATTLE_ACCOUNT_UID", "").strip()
-    conn = create_connection()
-    try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            if requested_uid:
-                cursor.execute(
-                    """
-                    SELECT id, uid, access_key, viewer_id, name
-                    FROM accounts
-                    WHERE uid = %s AND is_active = TRUE AND viewer_id IS NOT NULL
-                    """,
-                    (requested_uid,),
-                )
-            else:
-                cursor.execute(
-                    """
-                    SELECT id, uid, access_key, viewer_id, name
-                    FROM accounts
-                    WHERE is_active = TRUE AND viewer_id IS NOT NULL
-                    ORDER BY id
-                    LIMIT 1
-                    """
-                )
-            account = cursor.fetchone()
-            if not account:
-                raise RuntimeError("no active PCRDB account with viewer_id is available")
-            return dict(account)
-    finally:
-        conn.close()
 
 
 def get_worker_state(connection=None) -> dict[str, Any]:

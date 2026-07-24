@@ -8,8 +8,9 @@ import os
 from datetime import datetime
 from typing import Dict, Any, List
 
+from pcrdb.account_pool import available_groups, lease_account
 from pcrdb.api.endpoints import PCRApi, create_client
-from pcrdb.db.connection import get_accounts_by_group, insert_snapshots_batch
+from pcrdb.db.connection import insert_snapshots_batch
 from psycopg2.extras import Json
 
 # 用于统计实际获取的记录数
@@ -40,6 +41,7 @@ async def query_and_save_deck(client: PCRApi, group: int, pages: int = 2):
     if all_users:
         insert_deck_batch(all_users, group)
         print(f"第 {group} 组完成，共 {len(all_users)} 条记录")
+    return len(all_users)
 
 
 def insert_deck_batch(user_list: List[Dict], group: int):
@@ -70,35 +72,39 @@ def insert_deck_batch(user_list: List[Dict], group: int):
         _fetch_counter['count'] += len(records)
 
 
-async def run_async():
+async def _run_group(group_id: int) -> int:
+    lease = lease_account("arena_deck_sync", arena_group=group_id)
+    try:
+        client = await create_client(lease.client_data)
+        count = await query_and_save_deck(client, group_id)
+    except BaseException as exc:
+        try:
+            lease.release(False, type(exc).__name__)
+        except Exception as release_exc:
+            print(f"分场 {group_id} 账号租约释放失败: {release_exc}")
+        raise
+    else:
+        if count <= 0:
+            lease.release(False, "EmptyResult")
+            raise RuntimeError(f"JJC group {group_id} returned no usable rows")
+        lease.release(True)
+        return count
+
+
+async def run_async(groups: List[int]):
     """异步运行"""
-    # 获取每个分场的查询账号
-    accounts_map = get_accounts_by_group('arena')
-    
-    if not accounts_map:
+    if not groups:
         print("没有找到配置了 JJC 分场的账号。请确保 accounts 表中 arena_group 已正确设置。")
         return
 
-    print(f"将采集以下分场: {list(accounts_map.keys())}")
-    
-    tasks = []
-    for group_id, account in accounts_map.items():
-        # 创建客户端
-        acc_dict = {
-            'vid': account.viewer_id,
-            'uid': str(account.uid),
-            'access_key': account.access_key
-        }
-        
-        try:
-            client = await create_client(acc_dict)
-            task = asyncio.create_task(query_and_save_deck(client, group_id))
-            tasks.append(task)
-        except Exception as e:
-            print(f"分场 {group_id} (账号 {account.uid}) 初始化失败: {e}")
-    
-    if tasks:
-        await asyncio.gather(*tasks)
+    print(f"将采集以下分场: {groups}")
+    results = await asyncio.gather(
+        *(_run_group(group_id) for group_id in groups),
+        return_exceptions=True,
+    )
+    errors = [result for result in results if isinstance(result, BaseException)]
+    if errors:
+        raise RuntimeError(f"{len(errors)} JJC group task(s) failed") from errors[0]
 
 
 def run():
@@ -114,8 +120,8 @@ def run():
     _fetch_counter = {'count': 0}
     
     # 获取分场数以计算预期获取数
-    accounts_map = get_accounts_by_group('arena')
-    num_groups = len(accounts_map)
+    groups = available_groups('arena')
+    num_groups = len(groups)
     pages_per_group = 2  # query_and_save_deck 默认 pages=2
     records_per_page = 50  # 每页约50条
     records_expected = num_groups * pages_per_group * records_per_page
@@ -123,7 +129,7 @@ def run():
     task_logger = TaskLogger('arena_deck_sync')
     task_logger.start(
         records_expected=records_expected,
-        details={'groups': list(accounts_map.keys()), 'pages_per_group': pages_per_group}
+        details={'groups': groups, 'pages_per_group': pages_per_group}
     )
     
     if os.name == 'nt':
@@ -134,7 +140,7 @@ def run():
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(run_async())
+            loop.run_until_complete(run_async(groups))
         finally:
             loop.close()
         

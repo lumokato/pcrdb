@@ -82,7 +82,9 @@ ARENA_ALERT_DINGTALK_WEBHOOK=<webhook URL>
 ARENA_ALERT_DINGTALK_SECRET=<optional signing secret>
 ```
 
-默认使用 `accounts` 表中的第一个活跃采集账号。需要固定登录账号时设置 `ARENA_ALERT_ACCOUNT_UID`。Webhook 和加签密钥只能放在部署环境中，不得提交到仓库。
+竞技场提醒、会战榜、玩家档案、公会明细和分场任务统一从 `accounts` 的农场账号池短租账号。账号池通过 PostgreSQL advisory lock 避免并发任务重复使用同一账号，并按最近使用时间轮转；`pool_enabled=false` 的专用账号不会参与。Webhook 和加签密钥只能放在部署环境中，不得提交到仓库。
+
+批量查询并发由 `PCRDB_SYNC_NUM` 控制，会战分页并发由 `CLAN_BATTLE_QUERY_CONCURRENCY` 控制。JJC/PJJC 分场任务仍只租用属于目标分场的账号。
 
 钉钉机器人使用安全关键词时需允许 `pcrjjc`，所有正式提醒都会在标题中包含该关键词。
 

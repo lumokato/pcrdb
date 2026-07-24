@@ -123,7 +123,11 @@ def _load_schedule() -> dict[str, Any]:
 def main() -> None:
     scheduler = BlockingScheduler(
         timezone=SCHEDULER_TIMEZONE,
-        executors={"default": ThreadPoolExecutor(max_workers=2)},
+        executors={
+            "default": ThreadPoolExecutor(
+                max_workers=max(2, int(os.getenv("PCRDB_SCHEDULER_WORKERS", "4")))
+            )
+        },
         job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 300},
     )
 

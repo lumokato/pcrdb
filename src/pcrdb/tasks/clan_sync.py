@@ -222,7 +222,8 @@ def run(new_clan_add: int = 100):
             data_processor=process_clan_data,
             pg_inserter=insert_with_count,
             sync_num=config['sync_num'],
-            batch_size=config['batch_size']
+            batch_size=config['batch_size'],
+            purpose='clan_sync',
         )
         
         queue.run()

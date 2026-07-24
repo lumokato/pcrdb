@@ -33,7 +33,6 @@ class ArenaAlertConfig:
     target_viewer_id: int
     webhook_url: str
     webhook_secret: str = ""
-    account_uid: str = ""
     poll_seconds: int = 30
 
     @classmethod
@@ -59,7 +58,6 @@ class ArenaAlertConfig:
             target_viewer_id=int(target),
             webhook_url=webhook_url,
             webhook_secret=os.getenv("ARENA_ALERT_DINGTALK_SECRET", "").strip(),
-            account_uid=os.getenv("ARENA_ALERT_ACCOUNT_UID", "").strip(),
             poll_seconds=poll_seconds,
         )
 
@@ -209,6 +207,12 @@ async def _default_client_factory(account: dict[str, Any]):
     return await create_client(account)
 
 
+def _default_lease_factory(purpose: str):
+    from pcrdb.account_pool import lease_account
+
+    return lease_account(purpose)
+
+
 class ArenaAlertMonitor:
     def __init__(
         self,
@@ -216,6 +220,7 @@ class ArenaAlertMonitor:
         notifier: DingTalkNotifier | None = None,
         connection_factory: Callable[..., Any] = _default_connection_factory,
         client_factory: Callable[[dict[str, Any]], Awaitable[Any]] = _default_client_factory,
+        lease_factory: Callable[[str], Any] = _default_lease_factory,
     ):
         self.config = config
         self.notifier = notifier or DingTalkNotifier(
@@ -224,7 +229,8 @@ class ArenaAlertMonitor:
         )
         self.connection_factory = connection_factory
         self.client_factory = client_factory
-        self._client = None
+        self.lease_factory = lease_factory
+        self._clients: dict[int, Any] = {}
 
     def run(self) -> str:
         return asyncio.run(self.run_once())
@@ -240,7 +246,7 @@ class ArenaAlertMonitor:
                 return "locked"
 
             previous = self._load_state(connection)
-            current = await self._query_current_ranks(connection)
+            current = await self._query_current_ranks()
             observed_at = datetime.now(BEIJING)
 
             if previous is None:
@@ -346,39 +352,23 @@ class ArenaAlertMonitor:
                 ),
             )
 
-    async def _query_current_ranks(self, connection) -> ArenaRanks:
-        if self._client is None:
-            account = self._select_account(connection)
-            self._client = await self.client_factory(account)
-
+    async def _query_current_ranks(self) -> ArenaRanks:
+        lease = self.lease_factory("arena_alert")
+        account_id = lease.account.id
         try:
-            profile = await self._client.query_profile(self.config.target_viewer_id)
-        except Exception:
-            self._client = None
+            client = self._clients.get(account_id)
+            if client is None:
+                client = await self.client_factory(lease.client_data)
+                self._clients[account_id] = client
+            profile = await client.query_profile(self.config.target_viewer_id)
+            ranks = parse_profile(profile, self.config.target_viewer_id)
+        except BaseException as exc:
+            self._clients.pop(account_id, None)
+            try:
+                lease.release(False, type(exc).__name__)
+            except Exception:
+                logger.exception("Failed to release an arena alert account lease")
             raise
-        return parse_profile(profile, self.config.target_viewer_id)
-
-    def _select_account(self, connection) -> dict[str, Any]:
-        query = """
-            SELECT viewer_id, uid, access_key
-            FROM accounts
-            WHERE is_active = TRUE
-        """
-        params: tuple[Any, ...] = ()
-        if self.config.account_uid:
-            query += " AND uid = %s"
-            params = (self.config.account_uid,)
-        query += " ORDER BY id LIMIT 1"
-
-        with connection.cursor() as cursor:
-            cursor.execute(query, params)
-            row = cursor.fetchone()
-        if row is None:
-            if self.config.account_uid:
-                raise ArenaAlertError("configured arena alert account is not active")
-            raise ArenaAlertError("no active PCRDB account is available for arena alerts")
-        return {
-            "vid": row[0] or 0,
-            "uid": str(row[1]),
-            "access_key": row[2],
-        }
+        else:
+            lease.release(True)
+            return ranks

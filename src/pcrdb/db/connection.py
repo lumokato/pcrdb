@@ -7,14 +7,15 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime
+from threading import local
 
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 
 
-# Module-level connection cache
-_connection = None
+# Cached connections are thread-local because APScheduler runs jobs concurrently.
+_connections = local()
 _config = None
 
 
@@ -30,6 +31,14 @@ class Account:
     grand_arena_group: int = 0
     is_active: bool = True
     note: Optional[str] = None
+    pool_enabled: bool = True
+
+    def as_client_dict(self) -> Dict[str, Any]:
+        return {
+            'vid': self.viewer_id or 0,
+            'uid': str(self.uid),
+            'access_key': self.access_key,
+        }
 
 
 def get_config() -> Dict[str, Any]:
@@ -99,12 +108,13 @@ def get_connection():
     """
     Get PostgreSQL connection (cached)
     """
-    global _connection
-    if _connection is not None and not _connection.closed:
-        return _connection
-    
-    _connection = create_connection()
-    return _connection
+    connection = getattr(_connections, 'connection', None)
+    if connection is not None and not connection.closed:
+        return connection
+
+    connection = create_connection()
+    _connections.connection = connection
+    return connection
 
 
 def get_cursor():
@@ -115,10 +125,10 @@ def get_cursor():
 
 def close_connection():
     """Close the cached connection"""
-    global _connection
-    if _connection is not None:
-        _connection.close()
-        _connection = None
+    connection = getattr(_connections, 'connection', None)
+    if connection is not None:
+        connection.close()
+        _connections.connection = None
 
 
 def get_accounts(active_only: bool = True) -> List[Account]:
@@ -131,10 +141,14 @@ def get_accounts(active_only: bool = True) -> List[Account]:
     conn = get_connection()
     cursor = conn.cursor()
     
+    columns = """
+        id, uid, access_key, viewer_id, name, arena_group,
+        grand_arena_group, is_active, note, pool_enabled
+    """
     if active_only:
-        cursor.execute("SELECT * FROM accounts WHERE is_active = TRUE ORDER BY id")
+        cursor.execute(f"SELECT {columns} FROM accounts WHERE is_active = TRUE ORDER BY id")
     else:
-        cursor.execute("SELECT * FROM accounts ORDER BY id")
+        cursor.execute(f"SELECT {columns} FROM accounts ORDER BY id")
     
     accounts = []
     for row in cursor.fetchall():
@@ -147,7 +161,8 @@ def get_accounts(active_only: bool = True) -> List[Account]:
             arena_group=row[5] or 0,
             grand_arena_group=row[6] or 0,
             is_active=row[7],
-            note=row[8]
+            note=row[8],
+            pool_enabled=row[9],
         ))
     
     return accounts
@@ -167,6 +182,8 @@ def get_accounts_by_group(group_type: str = 'grand_arena') -> Dict[int, Account]
     result = {}
     
     for acc in accounts:
+        if not acc.pool_enabled:
+            continue
         if group_type == 'grand_arena':
             group_id = acc.grand_arena_group
         else:

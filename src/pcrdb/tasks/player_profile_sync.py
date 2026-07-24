@@ -229,9 +229,17 @@ def run(mode: str = 'top_clans', rank_limit: int = 30):
     )
     
     if not viewer_ids:
-        print("没有待查询的成员")
-        task_logger.finish_success(records_fetched=0)
-        return
+        conn = get_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT MAX(collected_at) FROM clan_snapshots")
+            latest_clan_snapshot = cursor.fetchone()[0]
+        message = (
+            "没有近30天公会明细，无法确定玩家档案采集目标"
+            f"（公会明细最新时间: {latest_clan_snapshot or '无'}）"
+        )
+        print(message)
+        task_logger.finish_failed(message, records_fetched=0)
+        raise RuntimeError(message)
     
     try:
         # 使用闭包传递 member_info 和计数
@@ -244,7 +252,8 @@ def run(mode: str = 'top_clans', rank_limit: int = 30):
             data_processor=process_profile,
             pg_inserter=inserter_with_count,
             sync_num=config['sync_num'],
-            batch_size=config['batch_size']
+            batch_size=config['batch_size'],
+            purpose=task_name,
         )
         
         queue.run()
