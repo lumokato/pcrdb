@@ -4,11 +4,10 @@
 """
 import time
 from typing import Dict, Any, List, Tuple
-from datetime import datetime
 from psycopg2.extras import Json
 
 from pcrdb.tasks.base import TaskQueue
-from pcrdb.db.connection import get_connection, insert_snapshots_batch, get_config
+from pcrdb.db.connection import get_connection, insert_snapshots_batch, get_config, utc_now
 
 
 def get_target_players(mode: str = 'top_clans', rank_limit: int = 30) -> Tuple[List[int], Dict[int, Dict]]:
@@ -159,7 +158,7 @@ def process_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
 def insert_profile_batch(data_batch: List[Dict], member_info: Dict):
     """批量插入玩家档案数据"""
     records = []
-    now = datetime.now()
+    now = utc_now()
     
     for data in data_batch:
         if not data:

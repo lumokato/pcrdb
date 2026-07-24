@@ -16,6 +16,8 @@ $$;
 SELECT format('ALTER ROLE pcrdb_web WITH LOGIN PASSWORD %L', :'web_password') \gexec
 SELECT format('ALTER ROLE pcrdb_worker WITH LOGIN PASSWORD %L', :'worker_password') \gexec
 
+ALTER DATABASE :DBNAME SET timezone TO 'Asia/Shanghai';
+
 GRANT CONNECT ON DATABASE :DBNAME TO pcrdb_web, pcrdb_worker;
 GRANT USAGE ON SCHEMA public, auth, clan_battle TO pcrdb_web, pcrdb_worker;
 

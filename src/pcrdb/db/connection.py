@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import local
 
 import psycopg2
@@ -17,6 +17,11 @@ from dotenv import load_dotenv
 # Cached connections are thread-local because APScheduler runs jobs concurrently.
 _connections = local()
 _config = None
+
+
+def utc_now() -> datetime:
+    """Return an aware timestamp suitable for TIMESTAMPTZ columns."""
+    return datetime.now(timezone.utc)
 
 
 @dataclass
@@ -61,7 +66,7 @@ def get_config() -> Dict[str, Any]:
     database = os.getenv('PCRDB_DATABASE', 'pcrdb')
     user = os.getenv('PCRDB_USER', 'postgres')
     password = os.getenv('PCRDB_PASSWORD', '')
-    sync_num = int(os.getenv('PCRDB_SYNC_NUM', '10'))
+    sync_num = int(os.getenv('PCRDB_SYNC_NUM', '4'))
     batch_size = int(os.getenv('PCRDB_BATCH_SIZE', '30'))
     access_key = os.getenv('PCRDB_ACCESS_KEY', '')
     connect_timeout = int(os.getenv('PCRDB_CONNECT_TIMEOUT', '10'))
@@ -236,7 +241,7 @@ def insert_snapshot(table: str, data: Dict[str, Any], collected_at: datetime = N
     cursor = conn.cursor()
     
     if collected_at is None:
-        collected_at = datetime.now()
+        collected_at = utc_now()
     
     data['collected_at'] = collected_at
     
@@ -276,7 +281,7 @@ def insert_snapshots_batch(table: str, records: List[Dict[str, Any]], collected_
     cursor = conn.cursor()
     
     if collected_at is None:
-        collected_at = datetime.now()
+        collected_at = utc_now()
     
     # Add collected_at to all records
     for record in records:

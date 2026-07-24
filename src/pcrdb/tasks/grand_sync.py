@@ -5,12 +5,11 @@ PJJC 排名同步任务
 import time
 import asyncio
 import os
-from datetime import datetime
 from typing import Dict, Any, List
 
 from pcrdb.account_pool import available_groups, lease_account
 from pcrdb.api.endpoints import PCRApi, create_client
-from pcrdb.db.connection import insert_snapshots_batch
+from pcrdb.db.connection import insert_snapshots_batch, utc_now
 
 # 用于统计实际获取的记录数
 _fetch_counter = {'count': 0}
@@ -42,7 +41,7 @@ def insert_grand_ranking(ranking_list: List[Dict], group: int):
     """插入 PJJC 排名数据"""
     global _fetch_counter
     records = []
-    now = datetime.now()
+    now = utc_now()
     
     for user in ranking_list:
         # favorite_unit 可能是字典或直接是 id

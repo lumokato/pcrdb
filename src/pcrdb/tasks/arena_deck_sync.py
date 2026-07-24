@@ -5,12 +5,11 @@ JJC 防守阵容采集任务
 import time
 import asyncio
 import os
-from datetime import datetime
 from typing import Dict, Any, List
 
 from pcrdb.account_pool import available_groups, lease_account
 from pcrdb.api.endpoints import PCRApi, create_client
-from pcrdb.db.connection import insert_snapshots_batch
+from pcrdb.db.connection import insert_snapshots_batch, utc_now
 from psycopg2.extras import Json
 
 # 用于统计实际获取的记录数
@@ -48,7 +47,7 @@ def insert_deck_batch(user_list: List[Dict], group: int):
     """批量插入防守阵容数据"""
     global _fetch_counter
     records = []
-    now = datetime.now()
+    now = utc_now()
     
     for user in user_list:
         # 提取阵容: 紧凑格式 [id, rarity, level, power]

@@ -4,10 +4,14 @@
 """
 import time
 from typing import Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from pcrdb.tasks.base import RetryableResultError, TaskQueue
-from pcrdb.db.connection import get_connection, insert_snapshots_batch, get_config
+from pcrdb.db.connection import get_connection, insert_snapshots_batch, get_config, utc_now
+
+
+BEIJING = ZoneInfo("Asia/Shanghai")
 
 
 def build_query_list(new_clan_add: int = 100) -> List[int]:
@@ -39,7 +43,7 @@ def build_query_list(new_clan_add: int = 100) -> List[int]:
     cursor.execute(query_active_sql)
     active_clans = [r[0] for r in cursor.fetchall()]
     
-    now = datetime.now()
+    now = datetime.now(BEIJING)
     is_full_scan_month = (now.month == 1 or now.month == 7)
     
     # 如果是空库 (无历史数据) 且不是生产库，尝试从生产库获取种子列表 (仅用于测试验证)
@@ -131,7 +135,7 @@ def insert_clan_batch(data_batch: List[Dict]):
     clan_records = []
     member_records = []
     
-    now = datetime.now()
+    now = utc_now()
     
     for item in data_batch:
         if item.get('type') != 'data':
@@ -162,7 +166,7 @@ def insert_clan_batch(data_batch: List[Dict]):
         for m in members:
             # 转换 last_login_time (int timestamp) -> datetime
             login_ts = m['last_login_time']
-            login_time = datetime.fromtimestamp(login_ts) if login_ts else None
+            login_time = datetime.fromtimestamp(login_ts, timezone.utc) if login_ts else None
             
             member_records.append({
                 'viewer_id': m['viewer_id'],

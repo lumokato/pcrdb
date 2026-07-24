@@ -32,7 +32,7 @@ class TaskQueue:
         query_list: List[int],
         data_processor: Callable[[Dict], Any],
         pg_inserter: Callable[[List[Dict]], None],
-        sync_num: int = 10,
+        sync_num: int = 4,
         batch_size: int = 30,
         purpose: str = "bulk_sync",
     ):
