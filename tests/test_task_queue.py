@@ -82,10 +82,13 @@ class TaskQueueRetryTests(IsolatedAsyncioTestCase):
         ):
             result = await queue._worker(lease, 0)
 
-        self.assertEqual(result, {"succeeded": 0, "failed": 1, "login_failed": 0})
+        self.assertEqual(
+            result,
+            {"succeeded": 0, "failed": 0, "empty": 1, "login_failed": 0},
+        )
         client.query_clan.assert_awaited_once_with(1)
         client.login.assert_not_awaited()
-        self.assertEqual(lease.releases, [(False, "EmptyResult")])
+        self.assertEqual(lease.releases, [(True, None)])
 
     async def test_transport_error_retries_and_reauthenticates(self):
         lease = FakeLease(1)
@@ -104,7 +107,10 @@ class TaskQueueRetryTests(IsolatedAsyncioTestCase):
         ):
             result = await queue._worker(lease, 0)
 
-        self.assertEqual(result, {"succeeded": 1, "failed": 0, "login_failed": 0})
+        self.assertEqual(
+            result,
+            {"succeeded": 1, "failed": 0, "empty": 0, "login_failed": 0},
+        )
         self.assertEqual(client.query_clan.await_count, 2)
         client.login.assert_awaited_once()
         self.assertEqual(lease.releases, [(True, None)])

@@ -100,7 +100,8 @@ class TaskQueue:
         """单个客户端工作协程"""
         succeeded = 0
         failed = 0
-        result = {"succeeded": 0, "failed": 0, "login_failed": 0}
+        empty = 0
+        result = {"succeeded": 0, "failed": 0, "empty": 0, "login_failed": 0}
         lease_success = False
         lease_error_type: str | None = "UnknownError"
         try:
@@ -126,6 +127,7 @@ class TaskQueue:
                     data_batch = []
                     for query_id in batch:
                         success = False
+                        normal_empty = False
                         for retry in range(4):
                             try:
                                 if self.query_type == 'clan':
@@ -151,6 +153,9 @@ class TaskQueue:
                                         data_batch.append(processed)
                                         success = True
                                         succeeded += 1
+                                    else:
+                                        empty += 1
+                                        normal_empty = True
                                     # Empty data is a normal miss in sparse clan-ID scans.
                                     break
 
@@ -161,7 +166,7 @@ class TaskQueue:
                                 except Exception:
                                     pass
 
-                        if not success:
+                        if not success and not normal_empty:
                             failed += 1
                         self.processed_count += 1
                         self.queue.task_done()
@@ -176,11 +181,12 @@ class TaskQueue:
                                 f"database insert failed: {type(exc).__name__}"
                             ) from exc
 
-                lease_success = succeeded > 0 or failed == 0
-                lease_error_type = None if lease_success else "EmptyResult"
+                lease_success = failed == 0
+                lease_error_type = None if lease_success else "QueryError"
                 result = {
                     "succeeded": succeeded,
                     "failed": failed,
+                    "empty": empty,
                     "login_failed": 0,
                 }
         except BaseException as exc:
@@ -196,7 +202,7 @@ class TaskQueue:
     async def _run_async(self):
         """异步主函数"""
         if not self.query_list:
-            return {"succeeded": 0, "failed": 0, "login_failed": 0}
+            return {"succeeded": 0, "failed": 0, "empty": 0, "login_failed": 0}
 
         requested_clients = min(self.sync_num, len(self.query_list))
         leases = lease_accounts(requested_clients, self.purpose)
@@ -265,7 +271,7 @@ class TaskQueue:
 
         result = {
             key: sum(item[key] for item in worker_results)
-            for key in ("succeeded", "failed", "login_failed")
+            for key in ("succeeded", "failed", "empty", "login_failed")
         }
         if result["succeeded"] == 0 and self.total_tasks > 0:
             raise TaskQueueError(
