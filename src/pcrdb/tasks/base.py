@@ -17,6 +17,10 @@ class TaskQueueError(RuntimeError):
     """The query queue could not complete with the available accounts."""
 
 
+class RetryableResultError(RuntimeError):
+    """The API responded, but the response asks the caller to retry."""
+
+
 class TaskQueue:
     """
     并发任务队列
@@ -37,7 +41,7 @@ class TaskQueue:
         
         Args:
             query_list: 查询 ID 列表
-            data_processor: 数据处理函数，返回 None 表示失败需重试
+            data_processor: 返回处理后数据；None 表示正常空结果，需重试时抛 RetryableResultError
             pg_inserter: PostgreSQL 插入函数 (接收 list of dict)
             sync_num: 并发客户端数量 (最大)
             batch_size: 每批处理数量
@@ -74,7 +78,7 @@ class TaskQueue:
                 filled_len = int(bar_len * pct)
                 bar = '█' * filled_len + '-' * (bar_len - filled_len)
                 
-                eta_str = time.strftime("%M:%S", time.gmtime(eta))
+                eta_str = time.strftime("%H:%M:%S", time.gmtime(eta))
                 
                 sys.stdout.write(f"\r|{bar}| {pct:.1%} {self.processed_count}/{self.total_tasks} [{rate:.1f}it/s] ETA: {eta_str}")
                 sys.stdout.flush()
@@ -128,18 +132,29 @@ class TaskQueue:
                                     response = await client.query_clan(query_id)
                                 else:
                                     response = await client.query_profile(query_id)
-
-                                processed = self.data_processor(response)
-                                if processed:
-                                    data_batch.append(processed)
-                                    success = True
-                                    succeeded += 1
-                                    break
-                                print(f"\n[DEBUG] Processed returned None for {query_id}")
                             except Exception as exc:
                                 print(f"\n[DEBUG] Query error for {query_id}: {exc}")
+                            else:
+                                try:
+                                    processed = self.data_processor(response)
+                                except RetryableResultError as exc:
+                                    print(
+                                        f"\n[DEBUG] Retryable result for {query_id}: {exc}"
+                                    )
+                                except Exception as exc:
+                                    raise TaskQueueError(
+                                        f"data processing failed for {query_id}: "
+                                        f"{type(exc).__name__}"
+                                    ) from exc
+                                else:
+                                    if processed:
+                                        data_batch.append(processed)
+                                        success = True
+                                        succeeded += 1
+                                    # Empty data is a normal miss in sparse clan-ID scans.
+                                    break
 
-                            if retry < 3:
+                            if not success and retry < 3:
                                 await asyncio.sleep(2)
                                 try:
                                     await client.login()

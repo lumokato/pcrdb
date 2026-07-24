@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any, List
 from datetime import datetime
 
-from pcrdb.tasks.base import TaskQueue
+from pcrdb.tasks.base import RetryableResultError, TaskQueue
 from pcrdb.db.connection import get_connection, insert_snapshots_batch, get_config
 
 
@@ -90,7 +90,7 @@ def process_clan_data(clan_data: Dict[str, Any]) -> Dict[str, Any]:
     处理公会 API 返回数据
     
     Returns:
-        处理后的数据，或 None 表示需要重试
+        处理后的数据，或 None 表示公会不存在/已解散
     """
     if 'clan' in clan_data:
         # 成功获取数据
@@ -121,7 +121,7 @@ def process_clan_data(clan_data: Dict[str, Any]) -> Dict[str, Any]:
             return None # 暂时跳过解散处理，或者需要修改 base.py 传入 query_id
             
         elif '连接中断' in msg:
-            return None  # 需要重试
+            raise RetryableResultError(msg or '连接中断')
     
     return None
 
