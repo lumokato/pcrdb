@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 import yaml
 
 from pcrdb.clan_battle.collector import collect_tick
@@ -82,6 +83,34 @@ def _run_clan_battle(trigger_name: str) -> None:
     asyncio.run(collect_tick(trigger_name))
 
 
+def _is_enabled(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _add_arena_alert_job(scheduler: BlockingScheduler) -> None:
+    if not _is_enabled("ARENA_ALERT_ENABLED"):
+        return
+
+    from pcrdb.tasks.arena_alert import ArenaAlertConfig, ArenaAlertMonitor
+
+    try:
+        config = ArenaAlertConfig.from_env()
+    except ValueError as exc:
+        logger.error("Arena alert is enabled but its configuration is invalid: %s", exc)
+        return
+
+    monitor = ArenaAlertMonitor(config)
+    scheduler.add_job(
+        monitor.run,
+        IntervalTrigger(seconds=config.poll_seconds, timezone=SCHEDULER_TIMEZONE),
+        next_run_time=datetime.now(BEIJING),
+        id="arena_alert:poll",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+
 def _load_schedule() -> dict[str, Any]:
     path = Path(os.getenv("PCRDB_SCHEDULE_PATH", "/app/config/schedule.yaml"))
     if not path.exists():
@@ -125,6 +154,8 @@ def main() -> None:
             id="clan_battle:startup",
             kwargs={"trigger_name": "startup"},
         )
+
+    _add_arena_alert_job(scheduler)
 
     logger.info("PCRDB worker started with %d jobs", len(scheduler.get_jobs()))
     scheduler.start()

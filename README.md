@@ -70,6 +70,20 @@ Worker 每个北京时间 `00/30` 分运行一次：
 
 普通 PCRDB 任务继续读取 `config/schedule.yaml`，由 APScheduler 执行完整 cron 表达式；`L-N` 仍表示当月倒数第 `N+1` 天。
 
+## 竞技场提醒
+
+Worker 可监控一个玩家的 JJC 与 PJJC 排名，并在名次变差时通过钉钉群机器人发送提醒。当前排名基线保存在 PostgreSQL；首次启用时只建立基线、不发通知，Worker 重启后继续使用已有基线。
+
+```text
+ARENA_ALERT_ENABLED=true
+ARENA_ALERT_TARGET_VIEWER_ID=<viewer_id>
+ARENA_ALERT_POLL_SECONDS=30
+ARENA_ALERT_DINGTALK_WEBHOOK=<webhook URL>
+ARENA_ALERT_DINGTALK_SECRET=<optional signing secret>
+```
+
+默认使用 `accounts` 表中的第一个活跃采集账号。需要固定登录账号时设置 `ARENA_ALERT_ACCOUNT_UID`。Webhook 和加签密钥只能放在部署环境中，不得提交到仓库。
+
 ## 数据库备份
 
 `backup` 服务启动后立即运行 `pg_dump`，并在写入正式文件前使用 `pg_restore --list` 校验。卷内默认只保留最新一份完整 dump 和对应 SHA256；Dokploy Volume Backup 再将这个已完成的文件卷上传到对象存储，不直接在线复制 PostgreSQL 数据目录。

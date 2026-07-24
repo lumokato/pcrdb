@@ -13,6 +13,8 @@
 | `arena_deck_sync` | 同步JJC防守阵容 | `arena_deck_snapshots` |
 | `player_profile_sync` | 同步玩家档案 | `player_profile_snapshots` |
 
+Worker 还可为单个玩家每 30 秒检查一次 JJC/PJJC 排名，并在名次下降时通过钉钉群机器人提醒；排名基线保存在 `arena_alert_state`。
+
 ---
 
 ## 数据分析功能 (analysis/)
