@@ -4,6 +4,7 @@
 from typing import Dict, List, Optional
 
 from ..db.connection import get_connection
+from ..game_progress import exp_to_knight_level, get_talent_quest_total
 
 
 def get_clan_history(clan_id: int = None, clan_name: str = None, limit: int = 10) -> Dict:
@@ -278,49 +279,6 @@ def get_clan_members(clan_id: int = None, clan_name: str = None, period: str = N
     }
 
 
-def _exp_to_knight_level(exp: int) -> str:
-    """
-    Convert princess_knight_rank_total_exp to knight level.
-    Level 1-125: Linear, slope 53235
-    Level 126-201: Linear, slope 53236
-    Level 202-251: Quadratic, acceleration 505
-    Returns "251+" if exceeds level 251.
-    """
-    if exp is None or exp <= 0:
-        return "0"
-    
-    # Cumulative exp at level boundaries
-    # Level 125: 125 * 53235 = 6654375
-    # Level 201: 6654375 + 76 * 53236 = 6654375 + 4045936 = 10700311
-    exp_at_125 = 125 * 53235  # 6654375
-    exp_at_201 = exp_at_125 + 76 * 53236  # 10700311
-    
-    if exp <= exp_at_125:
-        level = exp // 53235
-        return str(max(1, level))
-    elif exp <= exp_at_201:
-        level = 125 + (exp - exp_at_125) // 53236
-        return str(level)
-    else:
-        # Quadratic phase 202-251
-        # Each level requires: base + (level - 202) * 505
-        # Approximate by iterating
-        remaining = exp - exp_at_201
-        level = 201
-        step = 53236  # Starting step for level 202
-        while remaining > 0 and level < 251:
-            step += 505
-            if remaining >= step:
-                remaining -= step
-                level += 1
-            else:
-                break
-        
-        if level >= 251:
-            return "251+"
-        return str(level)
-
-
 def _count_talent_quest(talent_data) -> int:
     """
     Count completed talent quest stages from JSON data.
@@ -421,8 +379,7 @@ def get_top_clan_profiles(date: str = None, clan_id: int = None) -> Dict:
     Returns:
         {date, talent_total, players: [{viewer_id, user_name, join_clan_name, ...}]}
     """
-    import os
-    talent_total = int(os.getenv('TALENT_QUEST_TOTAL', 250))
+    talent_total = get_talent_quest_total()
     
     conn = get_connection()
     cursor = conn.cursor()
@@ -491,7 +448,7 @@ def get_top_clan_profiles(date: str = None, clan_id: int = None) -> Dict:
             "team_level": team_level or 0,
             "unit_num": unit_num or 0,
             "total_power": total_power or 0,
-            "knight_level": _exp_to_knight_level(knight_exp),
+            "knight_level": exp_to_knight_level(knight_exp),
             "talent_done": _count_talent_quest(talent_data),
             "arena_rank": arena_rank or 0,
             "grand_arena_rank": grand_rank or 0

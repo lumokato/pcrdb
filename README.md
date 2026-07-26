@@ -88,6 +88,10 @@ ARENA_ALERT_DINGTALK_SECRET=<optional signing secret>
 
 钉钉机器人使用安全关键词时需允许 `pcrjjc`，所有正式提醒都会在标题中包含该关键词。
 
+## 游戏进度主数据
+
+日期历史中的骑士等级按 `src/pcrdb/master_data/game_progress.json` 的累计经验阈值精确换算，深域总关数也由该文件计算。游戏上限更新后应同步主数据版本、骑士阈值和五系深域数量；`TALENT_QUEST_TOTAL` 仅用于部署环境的显式临时覆盖。
+
 ## 数据库备份
 
 `backup` 服务启动后立即运行 `pg_dump`，并在写入正式文件前使用 `pg_restore --list` 校验。卷内默认只保留最新一份完整 dump 和对应 SHA256；Dokploy Volume Backup 再将这个已完成的文件卷上传到对象存储，不直接在线复制 PostgreSQL 数据目录。
