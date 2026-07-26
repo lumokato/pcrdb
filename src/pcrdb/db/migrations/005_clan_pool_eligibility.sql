@@ -1,0 +1,8 @@
+\set ON_ERROR_STOP on
+
+BEGIN;
+
+ALTER TABLE accounts
+    ALTER COLUMN pool_enabled SET DEFAULT FALSE;
+
+COMMIT;

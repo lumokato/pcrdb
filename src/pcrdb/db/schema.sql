@@ -126,6 +126,7 @@ grand_arena_group SMALLINT DEFAULT 0, -- PJJC group (0=not enabled or not querie
 -- status
 
 is_active BOOLEAN DEFAULT TRUE,
+    pool_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     note TEXT,
     
     created_at TIMESTAMPTZ DEFAULT NOW(),

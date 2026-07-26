@@ -3,7 +3,7 @@
 提供高层次的游戏数据查询接口
 """
 from typing import Optional, Dict, Any
-from .client import PCRClient
+from .client import PCRClient, PCRClientError, PCRProtocolError, PCRServerError
 
 
 class PCRApi:
@@ -29,14 +29,37 @@ class PCRApi:
         """登录游戏"""
         # print(f'登录账号 {self.viewer_id}')
         self.load, self.home = await self.client.login(self.uid, self.access_key)
+
+    @property
+    def current_clan_id(self) -> int | None:
+        """Return the clan reported by the current login session."""
+        if not isinstance(self.home, dict):
+            return None
+        user_clan = self.home.get("user_clan")
+        if not isinstance(user_clan, dict):
+            return None
+        clan_id = user_clan.get("clan_id")
+        return clan_id if isinstance(clan_id, int) and clan_id > 0 else None
     
-    async def _safe_call(self, endpoint: str, request: dict) -> dict:
+    async def _safe_call(
+        self,
+        endpoint: str,
+        request: dict,
+        *,
+        reject_server_error: bool = True,
+    ) -> dict:
         """安全调用 API，失败时自动重试"""
+        async def call_once() -> dict:
+            result = await self.client.call_api(endpoint, request)
+            if reject_server_error and "server_error" in result:
+                raise PCRServerError(endpoint, result["server_error"])
+            return result
+
         try:
-            return await self.client.call_api(endpoint, request)
+            return await call_once()
         except Exception:
-            await self.client.login(self.uid, self.access_key)
-            return await self.client.call_api(endpoint, request)
+            await self.login()
+            return await call_once()
     
     async def query_profile(self, target_viewer_id: int) -> dict:
         """
@@ -62,9 +85,11 @@ class PCRApi:
         Returns:
             公会详细信息，包含成员列表
         """
-        return await self._safe_call('/clan/others_info', {
-            'clan_id': clan_id
-        })
+        return await self._safe_call(
+            '/clan/others_info',
+            {'clan_id': clan_id},
+            reject_server_error=False,
+        )
     
     async def query_arena_ranking(self, page: int) -> dict:
         """
@@ -108,7 +133,11 @@ class PCRApi:
         """
         return await self._safe_call('/grand_arena/info', {})
     
-    async def query_clan_battle_ranking(self, page: int, clan_id: int = 0) -> dict:
+    async def query_clan_battle_ranking(
+        self,
+        page: int,
+        clan_id: int | None = None,
+    ) -> list[dict]:
         """
         查询会战排名
         
@@ -119,8 +148,12 @@ class PCRApi:
         Returns:
             会战排名列表
         """
+        resolved_clan_id = clan_id or self.current_clan_id
+        if resolved_clan_id is None:
+            raise PCRClientError("account does not belong to a clan")
+
         result = await self._safe_call('/clan_battle/period_ranking', {
-            'clan_id': clan_id, 
+            'clan_id': resolved_clan_id,
             'clan_battle_id': -1, 
             'period': -1, 
             'month': 0, 
@@ -128,7 +161,12 @@ class PCRApi:
             'is_my_clan': 0, 
             'is_first': 1
         })
-        return result.get('period_ranking', [])
+        ranking = result.get('period_ranking')
+        if not isinstance(ranking, list):
+            raise PCRProtocolError(
+                "clan battle response does not contain a ranking list"
+            )
+        return ranking
 
 
 async def create_client(account: dict) -> PCRApi:

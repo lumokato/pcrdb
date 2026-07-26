@@ -99,6 +99,39 @@ class LeaseSelectionTests(TestCase):
 
 
 class LeaseStateTests(TestCase):
+    def test_disabling_an_ineligible_account_removes_it_from_the_pool(self):
+        connection = FakeConnection()
+        lease = AccountLease(
+            account=Account(id=6, uid="uid", access_key="key"),
+            purpose="clan_battle",
+            connection=connection,
+        )
+
+        lease.disable("NotInClan")
+
+        self.assertTrue(connection.closed)
+        self.assertTrue(
+            any(
+                query.startswith("UPDATE accounts SET pool_enabled = FALSE")
+                and params == (6,)
+                for query, params in connection.queries
+            )
+        )
+        self.assertTrue(
+            any(
+                "last_error_type = %s" in query
+                and params == ("NotInClan", 6)
+                for query, params in connection.queries
+            )
+        )
+        self.assertTrue(
+            any(
+                "pg_advisory_unlock" in query
+                and params == (ACCOUNT_LOCK_NAMESPACE, 6)
+                for query, params in connection.queries
+            )
+        )
+
     def test_failed_release_records_cooldown_and_error_type(self):
         connection = FakeConnection()
         lease = AccountLease(

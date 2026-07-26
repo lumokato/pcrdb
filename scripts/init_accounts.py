@@ -31,6 +31,7 @@ def create_accounts_table():
             grand_arena_group SMALLINT DEFAULT 0,
             
             is_active BOOLEAN DEFAULT TRUE,
+            pool_enabled BOOLEAN NOT NULL DEFAULT FALSE,
             note TEXT,
             
             created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -69,8 +70,10 @@ def import_from_json():
         
         try:
             cursor.execute("""
-                INSERT INTO accounts (uid, access_key, viewer_id, is_active)
-                VALUES (%s, %s, %s, TRUE)
+                INSERT INTO accounts (
+                    uid, access_key, viewer_id, is_active, pool_enabled
+                )
+                VALUES (%s, %s, %s, TRUE, FALSE)
                 ON CONFLICT (uid) DO NOTHING
             """, (uid, access_key, vid))
             imported += 1

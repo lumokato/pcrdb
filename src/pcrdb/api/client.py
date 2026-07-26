@@ -30,6 +30,21 @@ class PCRProtocolError(PCRClientError):
     """The game server returned a response that could not be decoded."""
 
 
+class PCRServerError(PCRClientError):
+    """The game server returned a structured business error."""
+
+    def __init__(self, endpoint: str, error):
+        self.endpoint = endpoint
+        self.error = error
+        if isinstance(error, dict):
+            status = error.get("status", "unknown")
+            message = error.get("message") or error.get("title") or "unknown server error"
+        else:
+            status = "unknown"
+            message = str(error) or "unknown server error"
+        super().__init__(f"{endpoint} returned server error status={status}: {message}")
+
+
 # 版本配置
 _version_file = Path(__file__).parent.parent.parent.parent / 'version.txt'
 _version = os.getenv("PCR_APP_VERSION", "").strip() or "11.4.0"

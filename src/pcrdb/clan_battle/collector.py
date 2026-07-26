@@ -115,10 +115,25 @@ async def _lease_clients(count: int) -> list[tuple[Any, PCRApi]]:
                 lease.release(False, type(result).__name__)
             except Exception:
                 logger.exception("Failed to release a clan battle account after login failure")
+        elif client.current_clan_id is None:
+            try:
+                lease.disable("NotInClan")
+            except Exception:
+                logger.exception(
+                    "Failed to disable account id=%s without clan membership",
+                    lease.account.id,
+                )
+            else:
+                logger.warning(
+                    "Disabled account id=%s because it does not belong to a clan",
+                    lease.account.id,
+                )
         else:
             ready.append((lease, client))
     if not ready:
-        raise RuntimeError("all leased clan battle accounts failed to log in")
+        raise RuntimeError(
+            "no leased clan battle account logged in with valid clan membership"
+        )
     return ready
 
 

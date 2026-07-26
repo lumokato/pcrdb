@@ -194,14 +194,37 @@ class FakeLease:
         )()
         self.release_error = release_error
         self.releases = []
+        self.disables = []
 
     def release(self, success=True, error_type=None):
         self.releases.append((success, error_type))
         if self.release_error:
             raise self.release_error
 
+    def disable(self, reason):
+        self.disables.append(reason)
+
 
 class AccountLeaseCleanupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_account_without_clan_is_disabled_and_not_used(self):
+        lease = FakeLease(1)
+
+        class NoClanApi:
+            current_clan_id = None
+
+            async def login(self):
+                return None
+
+        with (
+            patch("pcrdb.account_pool.lease_accounts", return_value=[lease]),
+            patch("pcrdb.clan_battle.collector.PCRApi", return_value=NoClanApi()),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "valid clan membership"):
+                await _lease_clients(1)
+
+        self.assertEqual(lease.disables, ["NotInClan"])
+        self.assertEqual(lease.releases, [])
+
     async def test_cancelled_login_releases_all_leases(self):
         leases = [FakeLease(1), FakeLease(2)]
         login_started = asyncio.Event()

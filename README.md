@@ -82,7 +82,7 @@ ARENA_ALERT_DINGTALK_WEBHOOK=<webhook URL>
 ARENA_ALERT_DINGTALK_SECRET=<optional signing secret>
 ```
 
-竞技场提醒、会战榜、玩家档案、公会明细和分场任务统一从 `accounts` 的农场账号池短租账号。账号池通过 PostgreSQL advisory lock 避免并发任务重复使用同一账号，并按最近使用时间轮转；`pool_enabled=false` 的专用账号不会参与。Webhook 和加签密钥只能放在部署环境中，不得提交到仓库。
+竞技场提醒、会战榜、玩家档案、公会明细和分场任务统一从 `accounts` 的农场账号池短租账号。账号池通过 PostgreSQL advisory lock 避免并发任务重复使用同一账号，并按最近使用时间轮转；新账号默认 `pool_enabled=false`，确认已加入行会后才启用。会战任务使用每个登录会话返回的行会 ID；发现账号已不在行会时会将其移出共享池。Webhook 和加签密钥只能放在部署环境中，不得提交到仓库。
 
 批量查询并发由 `PCRDB_SYNC_NUM` 控制，会战分页并发由 `CLAN_BATTLE_QUERY_CONCURRENCY` 控制，两者默认均为 3，为持续运行的单账号竞技场提醒留出请求余量。账号池容量只用于轮转和故障切换，不代表并发登录数量。JJC/PJJC 分场任务仍只租用属于目标分场的账号。
 

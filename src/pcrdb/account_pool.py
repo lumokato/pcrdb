@@ -76,6 +76,41 @@ class AccountLease:
             self.released = True
             self.connection.close()
 
+    def disable(self, reason: str) -> None:
+        """Remove an ineligible account from the shared pool and release its lock."""
+        if self.released:
+            return
+
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE accounts
+                    SET pool_enabled = FALSE,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (self.account.id,),
+                )
+                cursor.execute(
+                    """
+                    UPDATE account_pool_state
+                    SET last_released_at = NOW(),
+                        consecutive_failures = 0,
+                        cooldown_until = NULL,
+                        last_error_type = %s
+                    WHERE account_id = %s
+                    """,
+                    ((reason or "Ineligible")[:120], self.account.id),
+                )
+                cursor.execute(
+                    "SELECT pg_advisory_unlock(%s, %s)",
+                    (ACCOUNT_LOCK_NAMESPACE, self.account.id),
+                )
+        finally:
+            self.released = True
+            self.connection.close()
+
     def __enter__(self) -> "AccountLease":
         return self
 
