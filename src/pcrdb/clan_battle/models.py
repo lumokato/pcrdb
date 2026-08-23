@@ -18,6 +18,7 @@ BOSS_MULTIPLIER = (
     (4.5, 4.5, 4.7, 4.8, 5.0),
 )
 LAP_UPGRADE = (7, 23)
+FROZEN_LEADER_NAMES = frozenset({"此账号已被冻结", "此账户已被冻结"})
 
 
 def _clean_text(value: Any, default: str) -> str:
@@ -99,9 +100,20 @@ class RankingRow:
 
 def normalize_rows(values: Iterable[Mapping[str, Any] | RankingRow]) -> list[RankingRow]:
     rows = [value if isinstance(value, RankingRow) else RankingRow.from_mapping(value) for value in values]
+    rows = [row for row in rows if row.leader_name not in FROZEN_LEADER_NAMES]
     rows.sort(key=lambda row: row.rank)
     if any(row.rank <= 0 for row in rows):
         raise ValueError("ranking rows contain a non-positive rank")
+
+    seen: set[int] = set()
+    duplicate_ranks: set[int] = set()
+    for row in rows:
+        if row.rank in seen:
+            duplicate_ranks.add(row.rank)
+        seen.add(row.rank)
+    if duplicate_ranks:
+        ranks = ", ".join(str(rank) for rank in sorted(duplicate_ranks))
+        raise ValueError(f"ranking rows contain duplicate ranks: {ranks}")
     return rows
 
 

@@ -182,6 +182,15 @@ def save_snapshot(
                     """,
                     (snapshot_id, captured_at, period),
                 )
+                cursor.execute(
+                    """
+                    DELETE FROM clan_battle.snapshots
+                    WHERE period = %s
+                      AND snapshot_type = 'final_candidate'
+                      AND snapshot_id <> %s
+                    """,
+                    (period, snapshot_id),
+                )
         if owns_connection:
             conn.commit()
         return snapshot_id
@@ -387,6 +396,7 @@ def list_snapshots(period: date | str) -> list[dict[str, Any]]:
                        row_count, min_rank, max_rank, is_final
                 FROM clan_battle.snapshots
                 WHERE period = %s
+                  AND (snapshot_type <> 'final_candidate' OR is_final)
                 ORDER BY captured_at ASC NULLS LAST, snapshot_id ASC
                 """,
                 (period_date,),

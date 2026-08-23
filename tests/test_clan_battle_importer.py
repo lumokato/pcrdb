@@ -69,10 +69,32 @@ class IdentityTests(unittest.TestCase):
 
 
 class RowTests(unittest.TestCase):
-    def test_tied_ranks_are_preserved(self):
-        rows = normalize_rows([ranking(970, 20), ranking(970, 10)])
-        self.assertEqual([row.rank for row in rows], [970, 970])
+    def test_frozen_leader_is_removed_before_duplicate_rank_validation(self):
+        frozen = ranking(818, 10)
+        frozen["leader_name"] = "此账户已被冻结"
+
+        rows = normalize_rows([ranking(818, 20), frozen, ranking(819, 10)])
+
+        self.assertEqual([row.rank for row in rows], [818, 819])
         self.assertEqual([row.damage for row in rows], [20, 10])
+
+    def test_both_frozen_leader_spellings_are_removed(self):
+        values = [ranking(1), ranking(2)]
+        values[0]["leader_name"] = "此账号已被冻结"
+        values[1]["leader_name"] = "此账户已被冻结"
+
+        self.assertEqual(normalize_rows(values), [])
+
+    def test_duplicate_non_frozen_ranks_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "duplicate ranks: 970"):
+            normalize_rows([ranking(970, 20), ranking(970, 10)])
+
+    def test_equal_scores_with_distinct_ranks_are_preserved(self):
+        rows = normalize_rows(
+            [ranking(812, 122_900_000), ranking(813, 122_900_000), ranking(814, 122_900_000)]
+        )
+
+        self.assertEqual([row.rank for row in rows], [812, 813, 814])
 
     def test_rank_gaps_are_preserved(self):
         rows = normalize_rows([ranking(1, 20), ranking(3, 10)])
@@ -107,10 +129,8 @@ class RowTests(unittest.TestCase):
 
         self.assertIs(unchanged, values)
         self.assertEqual(corrections, ())
-        self.assertEqual(
-            [row.rank for row in normalize_rows(unchanged)][969:972],
-            [970, 970, 971],
-        )
+        with self.assertRaisesRegex(ValueError, "duplicate ranks: 970"):
+            normalize_rows(unchanged)
 
 
 class PlanTests(unittest.TestCase):
