@@ -46,6 +46,7 @@ def save_snapshot(
     source: str,
     rows: Sequence[RankingRow | dict[str, Any]],
     *,
+    clan_battle_id: int | None = None,
     is_final: bool = False,
     connection=None,
 ) -> int:
@@ -67,8 +68,10 @@ def save_snapshot(
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """
-                INSERT INTO clan_battle.periods(period, status, started_at, updated_at)
-                VALUES (%s, %s, %s, NOW())
+                INSERT INTO clan_battle.periods(
+                    period, status, started_at, clan_battle_id, updated_at
+                )
+                VALUES (%s, %s, %s, %s, NOW())
                 ON CONFLICT (period) DO UPDATE
                 SET status = CASE
                         WHEN clan_battle.periods.status = 'final'
@@ -76,6 +79,10 @@ def save_snapshot(
                         ELSE EXCLUDED.status
                     END,
                     started_at = COALESCE(clan_battle.periods.started_at, EXCLUDED.started_at),
+                    clan_battle_id = COALESCE(
+                        clan_battle.periods.clan_battle_id,
+                        EXCLUDED.clan_battle_id
+                    ),
                     ended_at = CASE
                         WHEN clan_battle.periods.status = 'final'
                             THEN clan_battle.periods.ended_at
@@ -85,7 +92,7 @@ def save_snapshot(
                     END,
                     updated_at = NOW()
                 """,
-                (period, period_status, captured_at),
+                (period, period_status, captured_at, clan_battle_id),
             )
             cursor.execute(
                 """
@@ -132,13 +139,15 @@ def save_snapshot(
                         cursor,
                         """
                         INSERT INTO clan_battle.rankings(
-                            snapshot_id, rank, clan_name, leader_name, member_num,
+                            snapshot_id, row_number, rank,
+                            clan_name, leader_name, member_num,
                             damage, lap, boss_id, remain, grade_rank, bili_rank
                         ) VALUES %s
                         """,
                         [
                             (
                                 snapshot_id,
+                                row_number,
                                 row.rank,
                                 row.clan_name,
                                 row.leader_name,
@@ -150,7 +159,7 @@ def save_snapshot(
                                 row.grade_rank,
                                 row.bili_rank,
                             )
-                            for row in normalized
+                            for row_number, row in enumerate(normalized, start=1)
                         ],
                         page_size=1000,
                     )
@@ -251,8 +260,9 @@ def latest_final_snapshot() -> dict[str, Any] | None:
             cursor.execute(
                 """
                 SELECT s.snapshot_id, s.period, s.captured_at,
-                       s.content_sha256, s.probe_sha256
+                       s.content_sha256, s.probe_sha256, p.clan_battle_id
                 FROM clan_battle.snapshots s
+                JOIN clan_battle.periods p ON p.period = s.period
                 WHERE s.is_final
                 ORDER BY s.period DESC
                 LIMIT 1
@@ -348,7 +358,8 @@ def list_periods(limit: int = 60) -> list[dict[str, Any]]:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """
-                SELECT p.period, p.status, p.started_at, p.finalized_at,
+                SELECT p.period, p.status, p.clan_battle_id,
+                       p.started_at, p.finalized_at,
                        p.final_snapshot_id, COUNT(s.snapshot_id)::INTEGER AS snapshot_count,
                        MIN(s.captured_at) AS first_captured_at,
                        MAX(s.captured_at) AS last_captured_at
@@ -447,7 +458,7 @@ def query_rankings(
                 SELECT r.*
                 FROM clan_battle.rankings r
                 WHERE {where}
-                ORDER BY r.rank
+                ORDER BY r.rank, r.row_number
                 LIMIT %s OFFSET %s
                 """,
                 [*params, limit, page * limit],
@@ -479,7 +490,7 @@ def query_scorelines(
                 SELECT *
                 FROM clan_battle.rankings
                 WHERE snapshot_id = %s AND rank = ANY(%s)
-                ORDER BY rank
+                ORDER BY rank, row_number
                 """,
                 (resolved_id, ranks),
             )

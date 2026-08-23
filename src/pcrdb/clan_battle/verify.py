@@ -52,7 +52,7 @@ def collect_verification() -> dict[str, Any]:
                            damage, lap, boss_id, remain, grade_rank, bili_rank
                     FROM clan_battle.rankings
                     WHERE snapshot_id = %s
-                    ORDER BY rank
+                    ORDER BY rank, row_number
                     LIMIT %s
                     """,
                     (source_file["snapshot_id"], source_file["row_count"]),
@@ -67,14 +67,14 @@ def collect_verification() -> dict[str, Any]:
                 FROM (
                     SELECT s.snapshot_id, s.row_count,
                            COUNT(r.rank)::INTEGER AS stored_rows,
-                           COUNT(DISTINCT r.rank)::INTEGER AS distinct_ranks,
+                           COUNT(DISTINCT r.row_number)::INTEGER AS distinct_rows,
                            MIN(r.rank) AS min_rank,
                            MAX(r.rank) AS max_rank
                     FROM clan_battle.snapshots s
                     LEFT JOIN clan_battle.rankings r ON r.snapshot_id = s.snapshot_id
                     GROUP BY s.snapshot_id
                     HAVING s.row_count <> COUNT(r.rank)
-                        OR COUNT(r.rank) <> COUNT(DISTINCT r.rank)
+                        OR COUNT(r.rank) <> COUNT(DISTINCT r.row_number)
                 ) broken
                 """
             )

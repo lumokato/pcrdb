@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import date, datetime
 import logging
 import os
@@ -8,7 +9,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from pcrdb.api.client import PCRClientError, PCRProtocolError, PCRTransportError
-from pcrdb.api.endpoints import PCRApi
+from pcrdb.api.endpoints import PCRApi, ClanBattleRuntime
 from pcrdb.clan_battle.models import RankingRow, normalize_rows, probe_sha256, rows_sha256
 from pcrdb.clan_battle.repository import (
     advisory_lock,
@@ -25,14 +26,16 @@ logger = logging.getLogger(__name__)
 BEIJING = ZoneInfo("Asia/Shanghai")
 
 
+@dataclass(frozen=True, slots=True)
+class FetchedRankingPage:
+    clan_battle_id: int
+    period: int
+    clan_battle_mode: int
+    rows: list[RankingRow]
+
+
 def _month_start(value: datetime | date) -> date:
     return value.date().replace(day=1) if isinstance(value, datetime) else value.replace(day=1)
-
-
-def _previous_month(value: date) -> date:
-    if value.month == 1:
-        return date(value.year - 1, 12, 1)
-    return date(value.year, value.month - 1, 1)
 
 
 def _next_month(value: date) -> date:
@@ -45,24 +48,25 @@ def _capture_time(now: datetime) -> datetime:
     return now.replace(second=0, microsecond=0)
 
 
-def _is_final_data_window(active_period: date, now: datetime) -> bool:
-    return _month_start(now) > active_period
-
-
-async def _fetch_page(api: PCRApi, page: int) -> list[RankingRow]:
-    values = await api.query_clan_battle_ranking(page)
-    return normalize_rows(values)
+async def _fetch_page(api: PCRApi, page: int) -> FetchedRankingPage:
+    value = await api.query_clan_battle_ranking_page(page)
+    return FetchedRankingPage(
+        clan_battle_id=value.clan_battle_id,
+        period=value.period,
+        clan_battle_mode=value.clan_battle_mode,
+        rows=normalize_rows(value.rankings),
+    )
 
 
 async def _fetch_snapshot(
     apis: list[PCRApi],
     page_limit: int,
-    first_page: list[RankingRow],
+    first_page: FetchedRankingPage,
 ) -> tuple[list[RankingRow], int]:
     if not apis:
         raise RuntimeError("no logged-in account is available for clan battle collection")
 
-    rows = list(first_page)
+    rows = list(first_page.rows)
     pages_fetched = 1
     for start in range(1, page_limit, len(apis)):
         page_numbers = list(range(start, min(start + len(apis), page_limit)))
@@ -72,12 +76,27 @@ async def _fetch_snapshot(
                 for index, page in enumerate(page_numbers)
             )
         )
-        for page_rows in page_results:
+        for page_result in page_results:
             pages_fetched += 1
-            if not page_rows:
+            if page_result.clan_battle_id != first_page.clan_battle_id:
+                raise PCRProtocolError(
+                    "clan battle id changed while fetching ranking pages"
+                )
+            if page_result.period != first_page.period:
+                raise PCRProtocolError(
+                    "clan battle period changed while fetching ranking pages"
+                )
+            if not page_result.rows:
                 return normalize_rows(rows), pages_fetched
-            rows.extend(page_rows)
+            rows.extend(page_result.rows)
     return normalize_rows(rows), pages_fetched
+
+
+def _runtime_state(apis: list[PCRApi]) -> ClanBattleRuntime:
+    values = {api.clan_battle_runtime for api in apis}
+    if len(values) != 1:
+        raise PCRProtocolError("leased accounts report inconsistent clan battle state")
+    return values.pop()
 
 
 async def _lease_clients(count: int) -> list[tuple[Any, PCRApi]]:
@@ -142,25 +161,6 @@ def _prepare_phase(state: dict, now: datetime) -> dict:
     active_period = state.get("active_period")
 
     if state["phase"] != "final":
-        if now.day >= 20 and active_period and current_month > active_period:
-            if state["phase"] in {"active", "settlement"}:
-                mark_period_settlement(active_period, state.get("last_nonempty_at"))
-            state.update(
-                phase="waiting_start",
-                active_period=current_month,
-                reference_probe_sha256=None,
-                candidate_content_sha256=None,
-                candidate_seen_count=0,
-                successful_empty_count=0,
-            )
-            update_worker_state(
-                phase="waiting_start",
-                active_period=current_month,
-                reference_probe_sha256=None,
-                candidate_content_sha256=None,
-                candidate_seen_count=0,
-                successful_empty_count=0,
-            )
         return state
 
     if active_period is None:
@@ -169,19 +169,19 @@ def _prepare_phase(state: dict, now: datetime) -> dict:
             active_period = latest["period"]
             state["active_period"] = active_period
             state["reference_probe_sha256"] = latest["probe_sha256"].strip()
+            state["active_clan_battle_id"] = latest.get("clan_battle_id")
             update_worker_state(
                 active_period=active_period,
+                active_clan_battle_id=latest.get("clan_battle_id"),
                 reference_probe_sha256=latest["probe_sha256"],
                 last_snapshot_id=latest["snapshot_id"],
             )
 
     if active_period and current_month > _next_month(active_period):
-        # The worker was offline for a whole battle. Recover the previous month's final first.
-        recovery_period = _previous_month(current_month)
-        state.update(phase="settlement", active_period=recovery_period)
+        state.update(phase="waiting_start", active_period=current_month)
         update_worker_state(
-            phase="settlement",
-            active_period=recovery_period,
+            phase="waiting_start",
+            active_period=current_month,
             candidate_content_sha256=None,
             candidate_seen_count=0,
             successful_empty_count=0,
@@ -236,63 +236,170 @@ async def collect_tick(trigger_name: str = "cron") -> None:
             leased_clients = await _lease_clients(concurrency)
             apis = [client for _, client in leased_clients]
             details["account_count"] = len(apis)
+            runtime = _runtime_state(apis)
             first_page = await _fetch_page(apis[0], 0)
             pages_fetched = 1
+            battle_is_active = runtime.now_open and not runtime.is_interval
+            stored_battle_id = state.get("active_clan_battle_id")
+            details.update(
+                clan_battle_id=first_page.clan_battle_id,
+                api_period=first_page.period,
+                now_open=runtime.now_open,
+                is_interval=runtime.is_interval,
+            )
+
+            should_initialize_identity = (
+                stored_battle_id is None
+                and (
+                    phase_before == "active"
+                    or (
+                        phase_before == "settlement"
+                        and (
+                            not battle_is_active
+                            or active_period == _month_start(started_at)
+                        )
+                    )
+                )
+            )
+            if should_initialize_identity:
+                stored_battle_id = first_page.clan_battle_id
+                state["active_clan_battle_id"] = stored_battle_id
+                update_worker_state(active_clan_battle_id=stored_battle_id)
+
+            async def save_progress(period: date) -> int:
+                nonlocal pages_fetched, records_fetched
+                rows, pages_fetched = await _fetch_snapshot(
+                    apis,
+                    int(os.getenv("CLAN_BATTLE_PROGRESS_PAGES", "30")),
+                    first_page,
+                )
+                records_fetched = len(rows)
+                return save_snapshot(
+                    period=period,
+                    captured_at=_capture_time(started_at),
+                    snapshot_type="progress",
+                    source="worker",
+                    rows=rows,
+                    clan_battle_id=first_page.clan_battle_id,
+                )
+
+            async def save_final_candidate(
+                period: date,
+            ) -> tuple[int, bool, str, str, int]:
+                nonlocal pages_fetched, records_fetched
+                rows, pages_fetched = await _fetch_snapshot(
+                    apis,
+                    int(os.getenv("CLAN_BATTLE_FINAL_PAGES", "300")),
+                    first_page,
+                )
+                records_fetched = len(rows)
+                content_hash = rows_sha256(rows)
+                probe_hash = probe_sha256(rows)
+                previous_hash = (state.get("candidate_content_sha256") or "").strip()
+                seen_count = (
+                    state["candidate_seen_count"] + 1
+                    if content_hash == previous_hash
+                    else 1
+                )
+                stable_threshold = int(os.getenv("CLAN_BATTLE_FINAL_STABLE_COUNT", "2"))
+                is_final = seen_count >= stable_threshold
+                saved_id = save_snapshot(
+                    period=period,
+                    captured_at=_capture_time(started_at),
+                    snapshot_type="final_candidate",
+                    source="worker",
+                    rows=rows,
+                    clan_battle_id=first_page.clan_battle_id,
+                    is_final=is_final,
+                )
+                return saved_id, is_final, content_hash, probe_hash, seen_count
 
             if phase_before == "waiting_start":
-                if not first_page:
+                if not battle_is_active:
+                    result_type = (
+                        "waiting_interval" if runtime.is_interval else "waiting_closed"
+                    )
+                    if stored_battle_id is None:
+                        update_worker_state(
+                            active_clan_battle_id=first_page.clan_battle_id,
+                            last_probe_at=started_at,
+                            last_error_type=None,
+                            last_error_message=None,
+                        )
+                    else:
+                        update_worker_state(
+                            last_probe_at=started_at,
+                            last_error_type=None,
+                            last_error_message=None,
+                        )
+                elif not first_page.rows:
                     result_type = "waiting_empty"
                     update_worker_state(
                         last_probe_at=started_at,
                         last_error_type=None,
                         last_error_message=None,
                     )
+                elif stored_battle_id == first_page.clan_battle_id:
+                    result_type = "waiting_same_battle"
+                    update_worker_state(
+                        last_probe_at=started_at,
+                        last_nonempty_at=started_at,
+                        last_error_type=None,
+                        last_error_message=None,
+                    )
                 else:
-                    first_hash = probe_sha256(first_page)
-                    reference_hash = (state.get("reference_probe_sha256") or "").strip()
-                    if not reference_hash:
-                        result_type = "waiting_reference_initialized"
-                        update_worker_state(
-                            reference_probe_sha256=first_hash,
-                            last_probe_at=started_at,
-                            last_nonempty_at=started_at,
-                        )
-                    elif first_hash == reference_hash:
-                        result_type = "waiting_old_final"
-                        update_worker_state(
-                            last_probe_at=started_at,
-                            last_nonempty_at=started_at,
-                            last_error_type=None,
-                            last_error_message=None,
-                        )
-                    else:
-                        rows, pages_fetched = await _fetch_snapshot(
-                            apis,
-                            int(os.getenv("CLAN_BATTLE_PROGRESS_PAGES", "30")),
-                            first_page,
-                        )
-                        records_fetched = len(rows)
-                        snapshot_id = save_snapshot(
-                            period=active_period,
-                            captured_at=_capture_time(started_at),
-                            snapshot_type="progress",
-                            source="worker",
-                            rows=rows,
-                        )
-                        phase_after = "active"
-                        result_type = "battle_started"
-                        update_worker_state(
-                            phase="active",
-                            successful_empty_count=0,
-                            last_probe_at=started_at,
-                            last_nonempty_at=started_at,
-                            last_snapshot_id=snapshot_id,
-                            last_error_type=None,
-                            last_error_message=None,
-                        )
+                    snapshot_id = await save_progress(active_period)
+                    phase_after = "active"
+                    result_type = "battle_started"
+                    update_worker_state(
+                        phase="active",
+                        active_clan_battle_id=first_page.clan_battle_id,
+                        reference_probe_sha256=probe_sha256(first_page.rows),
+                        candidate_content_sha256=None,
+                        candidate_seen_count=0,
+                        successful_empty_count=0,
+                        last_probe_at=started_at,
+                        last_nonempty_at=started_at,
+                        last_snapshot_id=snapshot_id,
+                        last_error_type=None,
+                        last_error_message=None,
+                    )
 
             elif phase_before == "active":
-                if not first_page:
+                if stored_battle_id != first_page.clan_battle_id and battle_is_active:
+                    mark_period_settlement(active_period, state.get("last_nonempty_at"))
+                    active_period = _month_start(started_at)
+                    snapshot_id = await save_progress(active_period)
+                    phase_after = "active"
+                    result_type = "battle_changed"
+                    update_worker_state(
+                        phase="active",
+                        active_period=active_period,
+                        active_clan_battle_id=first_page.clan_battle_id,
+                        reference_probe_sha256=probe_sha256(first_page.rows),
+                        candidate_content_sha256=None,
+                        candidate_seen_count=0,
+                        successful_empty_count=0,
+                        last_probe_at=started_at,
+                        last_nonempty_at=started_at,
+                        last_snapshot_id=snapshot_id,
+                        last_error_type=None,
+                        last_error_message=None,
+                    )
+                elif not battle_is_active:
+                    phase_after = "settlement"
+                    result_type = (
+                        "settlement_interval" if runtime.is_interval else "settlement_closed"
+                    )
+                    mark_period_settlement(active_period, started_at)
+                    update_worker_state(
+                        phase="settlement",
+                        successful_empty_count=0,
+                        last_probe_at=started_at,
+                        last_error_type=None,
+                        last_error_message=None,
+                    )
+                elif not first_page.rows:
                     empty_count = state["successful_empty_count"] + 1
                     threshold = int(os.getenv("CLAN_BATTLE_EMPTY_THRESHOLD", "2"))
                     phase_after = "settlement" if empty_count >= threshold else "active"
@@ -307,19 +414,7 @@ async def collect_tick(trigger_name: str = "cron") -> None:
                         last_error_message=None,
                     )
                 else:
-                    rows, pages_fetched = await _fetch_snapshot(
-                        apis,
-                        int(os.getenv("CLAN_BATTLE_PROGRESS_PAGES", "30")),
-                        first_page,
-                    )
-                    records_fetched = len(rows)
-                    snapshot_id = save_snapshot(
-                        period=active_period,
-                        captured_at=_capture_time(started_at),
-                        snapshot_type="progress",
-                        source="worker",
-                        rows=rows,
-                    )
+                    snapshot_id = await save_progress(active_period)
                     result_type = "progress_saved"
                     update_worker_state(
                         successful_empty_count=0,
@@ -331,27 +426,28 @@ async def collect_tick(trigger_name: str = "cron") -> None:
                     )
 
             elif phase_before == "settlement":
-                if not first_page:
-                    result_type = "settlement_waiting"
+                if battle_is_active and stored_battle_id != first_page.clan_battle_id:
+                    mark_period_settlement(active_period, state.get("last_nonempty_at"))
+                    active_period = _month_start(started_at)
+                    snapshot_id = await save_progress(active_period)
+                    phase_after = "active"
+                    result_type = "battle_started"
                     update_worker_state(
+                        phase="active",
+                        active_period=active_period,
+                        active_clan_battle_id=first_page.clan_battle_id,
+                        reference_probe_sha256=probe_sha256(first_page.rows),
+                        candidate_content_sha256=None,
+                        candidate_seen_count=0,
+                        successful_empty_count=0,
                         last_probe_at=started_at,
+                        last_nonempty_at=started_at,
+                        last_snapshot_id=snapshot_id,
                         last_error_type=None,
                         last_error_message=None,
                     )
-                elif not _is_final_data_window(active_period, started_at):
-                    rows, pages_fetched = await _fetch_snapshot(
-                        apis,
-                        int(os.getenv("CLAN_BATTLE_PROGRESS_PAGES", "30")),
-                        first_page,
-                    )
-                    records_fetched = len(rows)
-                    snapshot_id = save_snapshot(
-                        period=active_period,
-                        captured_at=_capture_time(started_at),
-                        snapshot_type="progress",
-                        source="worker",
-                        rows=rows,
-                    )
+                elif battle_is_active:
+                    snapshot_id = await save_progress(active_period)
                     phase_after = "active"
                     result_type = "battle_resumed"
                     update_worker_state(
@@ -365,31 +461,33 @@ async def collect_tick(trigger_name: str = "cron") -> None:
                         last_error_type=None,
                         last_error_message=None,
                     )
-                else:
-                    rows, pages_fetched = await _fetch_snapshot(
-                        apis,
-                        int(os.getenv("CLAN_BATTLE_FINAL_PAGES", "300")),
-                        first_page,
+                elif not first_page.rows:
+                    result_type = "settlement_waiting"
+                    update_worker_state(
+                        last_probe_at=started_at,
+                        last_error_type=None,
+                        last_error_message=None,
                     )
-                    records_fetched = len(rows)
-                    content_hash = rows_sha256(rows)
-                    previous_hash = (state.get("candidate_content_sha256") or "").strip()
-                    seen_count = state["candidate_seen_count"] + 1 if content_hash == previous_hash else 1
-                    stable_threshold = int(os.getenv("CLAN_BATTLE_FINAL_STABLE_COUNT", "2"))
-                    is_final = seen_count >= stable_threshold
-                    snapshot_id = save_snapshot(
-                        period=active_period,
-                        captured_at=_capture_time(started_at),
-                        snapshot_type="final_candidate",
-                        source="worker",
-                        rows=rows,
-                        is_final=is_final,
+                elif stored_battle_id != first_page.clan_battle_id:
+                    result_type = "settlement_waiting_new_interval"
+                    update_worker_state(
+                        last_probe_at=started_at,
+                        last_error_type=None,
+                        last_error_message=None,
+                    )
+                else:
+                    snapshot_id, is_final, content_hash, final_probe_hash, seen_count = (
+                        await save_final_candidate(active_period)
                     )
                     phase_after = "final" if is_final else "settlement"
                     result_type = "final_confirmed" if is_final else "final_candidate_saved"
                     update_worker_state(
                         phase=phase_after,
-                        reference_probe_sha256=probe_sha256(rows) if is_final else state.get("reference_probe_sha256"),
+                        reference_probe_sha256=(
+                            final_probe_hash
+                            if is_final
+                            else state.get("reference_probe_sha256")
+                        ),
                         candidate_content_sha256=None if is_final else content_hash,
                         candidate_seen_count=0 if is_final else seen_count,
                         successful_empty_count=0,

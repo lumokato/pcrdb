@@ -9,6 +9,13 @@ DO $$
 DECLARE
     primary_key_name TEXT;
 BEGIN
+    -- The database entrypoint replays every migration on each container start.
+    -- Once 004_allow_tied_ranks.sql has created its compatibility sequence,
+    -- this older migration must not restore the obsolete unique-rank key.
+    IF to_regclass('clan_battle.rankings_row_number_seq') IS NOT NULL THEN
+        RETURN;
+    END IF;
+
     IF EXISTS (
         SELECT 1
         FROM pg_attribute

@@ -15,7 +15,12 @@ class ClanBattleEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_uses_the_logged_in_accounts_clan_id(self):
         api = self.make_api(54)
         api.client.call_api = AsyncMock(
-            return_value={"period_ranking": [{"rank": 1}]}
+            return_value={
+                "clan_battle_id": 1090,
+                "period": 1,
+                "clan_battle_mode": 0,
+                "period_ranking": [{"rank": 1}],
+            }
         )
 
         result = await api.query_clan_battle_ranking(3)
@@ -33,6 +38,33 @@ class ClanBattleEndpointTests(unittest.IsolatedAsyncioTestCase):
                 "is_first": 1,
             },
         )
+
+    async def test_preserves_clan_battle_identity_for_collectors(self):
+        api = self.make_api(54)
+        api.client.call_api = AsyncMock(
+            return_value={
+                "clan_battle_id": 1090,
+                "period": 1,
+                "clan_battle_mode": 0,
+                "period_ranking": [{"rank": 1}],
+            }
+        )
+
+        result = await api.query_clan_battle_ranking_page(0)
+
+        self.assertEqual(result.clan_battle_id, 1090)
+        self.assertEqual(result.period, 1)
+        self.assertEqual(result.clan_battle_mode, 0)
+        self.assertEqual(result.rankings, [{"rank": 1}])
+
+    def test_reads_authoritative_clan_battle_availability_from_login(self):
+        api = self.make_api()
+        api.load = {"clan_battle": {"now_open": 1, "is_interval": 1}}
+
+        result = api.clan_battle_runtime
+
+        self.assertTrue(result.now_open)
+        self.assertTrue(result.is_interval)
 
     async def test_rejects_an_account_without_clan_membership(self):
         api = self.make_api(0)
@@ -62,10 +94,29 @@ class ClanBattleEndpointTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_missing_ranking_field_is_a_protocol_error(self):
         api = self.make_api()
-        api.client.call_api = AsyncMock(return_value={"period": 1})
+        api.client.call_api = AsyncMock(
+            return_value={
+                "clan_battle_id": 1090,
+                "period": 1,
+                "clan_battle_mode": 0,
+            }
+        )
 
         with self.assertRaisesRegex(PCRProtocolError, "ranking list"):
             await api.query_clan_battle_ranking(0)
+
+    async def test_missing_clan_battle_identity_is_a_protocol_error(self):
+        api = self.make_api()
+        api.client.call_api = AsyncMock(
+            return_value={
+                "period": 1,
+                "clan_battle_mode": 0,
+                "period_ranking": [],
+            }
+        )
+
+        with self.assertRaisesRegex(PCRProtocolError, "clan battle id"):
+            await api.query_clan_battle_ranking_page(0)
 
 
 if __name__ == "__main__":

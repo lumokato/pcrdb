@@ -69,9 +69,10 @@ class IdentityTests(unittest.TestCase):
 
 
 class RowTests(unittest.TestCase):
-    def test_duplicate_ranks_are_rejected(self):
-        with self.assertRaisesRegex(ValueError, "duplicate ranks: 970"):
-            normalize_rows([ranking(970, 20), ranking(970, 10)])
+    def test_tied_ranks_are_preserved(self):
+        rows = normalize_rows([ranking(970, 20), ranking(970, 10)])
+        self.assertEqual([row.rank for row in rows], [970, 970])
+        self.assertEqual([row.damage for row in rows], [20, 10])
 
     def test_rank_gaps_are_preserved(self):
         rows = normalize_rows([ranking(1, 20), ranking(3, 10)])
@@ -106,8 +107,10 @@ class RowTests(unittest.TestCase):
 
         self.assertIs(unchanged, values)
         self.assertEqual(corrections, ())
-        with self.assertRaisesRegex(ValueError, "duplicate ranks: 970"):
-            normalize_rows(unchanged)
+        self.assertEqual(
+            [row.rank for row in normalize_rows(unchanged)][969:972],
+            [970, 970, 971],
+        )
 
 
 class PlanTests(unittest.TestCase):

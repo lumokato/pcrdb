@@ -2,8 +2,23 @@
 游戏 API 端点封装
 提供高层次的游戏数据查询接口
 """
+from dataclasses import dataclass
 from typing import Optional, Dict, Any
 from .client import PCRClient, PCRClientError, PCRProtocolError, PCRServerError
+
+
+@dataclass(frozen=True, slots=True)
+class ClanBattleRankingPage:
+    clan_battle_id: int
+    period: int
+    clan_battle_mode: int
+    rankings: list[dict]
+
+
+@dataclass(frozen=True, slots=True)
+class ClanBattleRuntime:
+    now_open: bool
+    is_interval: bool
 
 
 class PCRApi:
@@ -40,6 +55,25 @@ class PCRApi:
             return None
         clan_id = user_clan.get("clan_id")
         return clan_id if isinstance(clan_id, int) and clan_id > 0 else None
+
+    @property
+    def clan_battle_runtime(self) -> ClanBattleRuntime:
+        """Return the authoritative clan-battle availability from login."""
+        if not isinstance(self.load, dict):
+            raise PCRProtocolError("login response does not contain load data")
+        value = self.load.get("clan_battle")
+        if not isinstance(value, dict):
+            raise PCRProtocolError("login response does not contain clan battle state")
+        now_open = value.get("now_open")
+        is_interval = value.get("is_interval")
+        if now_open not in (0, 1, False, True):
+            raise PCRProtocolError("clan battle state has an invalid now_open value")
+        if is_interval not in (0, 1, False, True):
+            raise PCRProtocolError("clan battle state has an invalid is_interval value")
+        return ClanBattleRuntime(
+            now_open=bool(now_open),
+            is_interval=bool(is_interval),
+        )
     
     async def _safe_call(
         self,
@@ -133,11 +167,11 @@ class PCRApi:
         """
         return await self._safe_call('/grand_arena/info', {})
     
-    async def query_clan_battle_ranking(
+    async def query_clan_battle_ranking_page(
         self,
         page: int,
         clan_id: int | None = None,
-    ) -> list[dict]:
+    ) -> ClanBattleRankingPage:
         """
         查询会战排名
         
@@ -146,7 +180,7 @@ class PCRApi:
             clan_id: 公会 ID（可选）
             
         Returns:
-            会战排名列表
+            带服务端会战标识的排名页
         """
         resolved_clan_id = clan_id or self.current_clan_id
         if resolved_clan_id is None:
@@ -166,7 +200,36 @@ class PCRApi:
             raise PCRProtocolError(
                 "clan battle response does not contain a ranking list"
             )
-        return ranking
+        clan_battle_id = result.get("clan_battle_id")
+        period = result.get("period")
+        clan_battle_mode = result.get("clan_battle_mode")
+        if not isinstance(clan_battle_id, int) or clan_battle_id <= 0:
+            raise PCRProtocolError(
+                "clan battle response does not contain a valid clan battle id"
+            )
+        if not isinstance(period, int) or period <= 0:
+            raise PCRProtocolError(
+                "clan battle response does not contain a valid period"
+            )
+        if not isinstance(clan_battle_mode, int):
+            raise PCRProtocolError(
+                "clan battle response does not contain a valid battle mode"
+            )
+        return ClanBattleRankingPage(
+            clan_battle_id=clan_battle_id,
+            period=period,
+            clan_battle_mode=clan_battle_mode,
+            rankings=ranking,
+        )
+
+    async def query_clan_battle_ranking(
+        self,
+        page: int,
+        clan_id: int | None = None,
+    ) -> list[dict]:
+        """Compatibility wrapper returning only ranking rows."""
+        result = await self.query_clan_battle_ranking_page(page, clan_id)
+        return result.rankings
 
 
 async def create_client(account: dict) -> PCRApi:

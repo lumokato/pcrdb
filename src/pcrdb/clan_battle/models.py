@@ -102,16 +102,6 @@ def normalize_rows(values: Iterable[Mapping[str, Any] | RankingRow]) -> list[Ran
     rows.sort(key=lambda row: row.rank)
     if any(row.rank <= 0 for row in rows):
         raise ValueError("ranking rows contain a non-positive rank")
-
-    seen: set[int] = set()
-    duplicate_ranks: set[int] = set()
-    for row in rows:
-        if row.rank in seen:
-            duplicate_ranks.add(row.rank)
-        seen.add(row.rank)
-    if duplicate_ranks:
-        ranks = ", ".join(str(rank) for rank in sorted(duplicate_ranks))
-        raise ValueError(f"ranking rows contain duplicate ranks: {ranks}")
     return rows
 
 
