@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from unittest import TestCase
 from unittest.mock import patch
 
-from pcrdb.clan_battle.repository import list_snapshots, save_snapshot
+from pcrdb.clan_battle.repository import list_periods, list_snapshots, save_snapshot
 
 
 def ranking(rank: int) -> dict[str, object]:
@@ -64,6 +64,21 @@ class FakeConnection:
 
 
 class SnapshotVisibilityTests(TestCase):
+    def test_final_period_list_excludes_active_and_unconfirmed_periods(self):
+        connection = FakeConnection(rows=[])
+
+        with patch(
+            "pcrdb.clan_battle.repository.create_connection",
+            return_value=connection,
+        ):
+            periods = list_periods(final_only=True)
+
+        self.assertEqual(periods, [])
+        query, params = connection.queries[0]
+        self.assertIn("p.status = 'final'", query)
+        self.assertIn("p.final_snapshot_id IS NOT NULL", query)
+        self.assertEqual(params, (60,))
+
     def test_list_snapshots_hides_unconfirmed_final_candidates(self):
         connection = FakeConnection(rows=[])
 
@@ -112,4 +127,3 @@ class SnapshotVisibilityTests(TestCase):
         self.assertEqual(len(cleanup_queries), 1)
         self.assertIn("snapshot_id <> %s", cleanup_queries[0][0])
         self.assertEqual(cleanup_queries[0][1], (date(2026, 7, 1), 4209))
-

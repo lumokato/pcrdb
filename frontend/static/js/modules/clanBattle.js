@@ -55,13 +55,23 @@ export function useClanBattle() {
         return data;
     };
 
-    const loadPeriods = async () => {
-        const data = await getJson(`${CLAN_BATTLE_API}/periods`);
+    const loadHistoryPeriods = async () => {
+        const data = await getJson(`${CLAN_BATTLE_API}/periods?final_only=true`);
         clanBattle.historyData = data.items.map(item => item.period.slice(0, 7));
         if (clanBattle.historyData.length > 0) {
-            clanBattle.selectedHistory = clanBattle.historyData[0];
-            clanBattle.currentPeriod = clanBattle.historyData[0];
+            if (!clanBattle.historyData.includes(clanBattle.selectedHistory)) {
+                clanBattle.selectedHistory = clanBattle.historyData[0];
+            }
+        } else {
+            clanBattle.selectedHistory = '';
         }
+    };
+
+    const loadCurrentPeriod = async () => {
+        const data = await getJson(`${CLAN_BATTLE_API}/periods?limit=1`);
+        clanBattle.currentPeriod = data.items.length > 0
+            ? data.items[0].period.slice(0, 7)
+            : '';
     };
 
     const loadSnapshots = async (period) => {
@@ -92,7 +102,7 @@ export function useClanBattle() {
     const loadClanBattleTime = async () => {
         clanBattle.loading = true;
         try {
-            await loadPeriods();
+            await loadCurrentPeriod();
             if (clanBattle.currentPeriod) await loadSnapshots(clanBattle.currentPeriod);
         } catch (error) {
             showError(error.message);
@@ -104,7 +114,7 @@ export function useClanBattle() {
     const loadClanBattleHistory = async () => {
         clanBattle.loading = true;
         try {
-            await loadPeriods();
+            await loadHistoryPeriods();
         } catch (error) {
             showError(error.message);
         } finally {

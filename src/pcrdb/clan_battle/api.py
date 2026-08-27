@@ -20,8 +20,11 @@ def status():
 
 
 @router.get("/periods")
-def periods(limit: int = Query(60, ge=1, le=240)):
-    return {"items": list_periods(limit)}
+def periods(
+    limit: int = Query(60, ge=1, le=240),
+    final_only: bool = Query(False),
+):
+    return {"items": list_periods(limit, final_only=final_only)}
 
 
 @router.get("/snapshots")

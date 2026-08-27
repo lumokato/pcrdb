@@ -361,12 +361,17 @@ def get_status() -> dict[str, Any]:
         conn.close()
 
 
-def list_periods(limit: int = 60) -> list[dict[str, Any]]:
+def list_periods(limit: int = 60, *, final_only: bool = False) -> list[dict[str, Any]]:
+    final_filter = (
+        "WHERE p.status = 'final' AND p.final_snapshot_id IS NOT NULL"
+        if final_only
+        else ""
+    )
     conn = create_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
-                """
+                f"""
                 SELECT p.period, p.status, p.clan_battle_id,
                        p.started_at, p.finalized_at,
                        p.final_snapshot_id, COUNT(s.snapshot_id)::INTEGER AS snapshot_count,
@@ -374,6 +379,7 @@ def list_periods(limit: int = 60) -> list[dict[str, Any]]:
                        MAX(s.captured_at) AS last_captured_at
                 FROM clan_battle.periods p
                 LEFT JOIN clan_battle.snapshots s ON s.period = p.period
+                {final_filter}
                 GROUP BY p.period
                 ORDER BY p.period DESC
                 LIMIT %s
